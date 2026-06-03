@@ -1,0 +1,396 @@
+const firebaseConfig = {
+    apiKey: "AIzaSyDjyK1m44L76tvpRtV6KhEmHHumHxeNqy4",
+    authDomain: "meu-jogo-velha.firebaseapp.com",
+    databaseURL: "https://meu-jogo-velha-default-rtdb.firebaseio.com",
+    projectId: "meu-jogo-velha",
+    storageBucket: "meu-jogo-velha.firebasestorage.app",
+    messagingSenderId: "699322233191",
+    appId: "1:699322233191:web:cbf9ca5cc9153b2b2b7fc2"
+};
+
+firebase.initializeApp(firebaseConfig);
+firebase.auth().signInAnonymously();
+const db = firebase.database();
+
+let roomId = null;
+let myPlayerId = null;
+let gameRef = null;
+let tetris1 = null;
+let tetris2 = null;
+let gameStarted = false;
+let myName = "";
+
+const lobbyDiv = document.getElementById("lobby");
+const gameAreaDiv = document.getElementById("game-area");
+const createBtn = document.getElementById("create-room");
+const shareBtn = document.getElementById("share-room");
+const resetBtn = document.getElementById("reset-game");
+const playerNameInput = document.getElementById("player-name");
+const roomCodeSpan = document.getElementById("room-code");
+const waitingMsg = document.getElementById("waiting-msg");
+const roomInfoDiv = document.getElementById("room-info");
+
+const p1NameSpan = document.getElementById("p1-name");
+const p2NameSpan = document.getElementById("p2-name");
+const p1LinesSpan = document.getElementById("p1-lines");
+const p1ScoreSpan = document.getElementById("p1-score");
+const p2LinesSpan = document.getElementById("p2-lines");
+const p2ScoreSpan = document.getElementById("p2-score");
+const p1Status = document.getElementById("p1-status");
+const p2Status = document.getElementById("p2-status");
+
+const overlay = document.getElementById("victory-overlay");
+const winnerMsgSpan = document.getElementById("winner-message");
+const closeOverlayBtn = document.getElementById("close-overlay");
+
+class TetrisGame {
+    constructor(canvasId, onUpdateStats, onGameOverCallback) {
+        this.canvas = document.getElementById(canvasId);
+        this.ctx = this.canvas.getContext('2d');
+        this.onUpdateStats = onUpdateStats;
+        this.onGameOverCallback = onGameOverCallback;
+
+        this.cols = 10;
+        this.rows = 20;
+        this.cellSize = this.canvas.width / this.cols;
+
+        this.board = Array(this.rows).fill().map(() => Array(this.cols).fill(0));
+        this.piece = null;
+        this.score = 0;
+        this.lines = 0;
+        this.gameOver = false;
+        this.intervalId = null;
+
+        this.pieces = [
+            [[1,1,1,1]],
+            [[1,1],[1,1]],
+            [[0,1,0],[1,1,1]],
+            [[1,0,0],[1,1,1]],
+            [[0,0,1],[1,1,1]],
+            [[0,1,1],[1,1,0]],
+            [[1,1,0],[0,1,1]]
+        ];
+        this.colors = ['#00e5f0', '#f0e000', '#c084fc', '#f97316', '#3b82f6', '#10b981', '#ef4444'];
+
+        this.initControls();
+        this.spawnPiece();
+        this.startLoop();
+    }
+
+    initControls() {
+        window.addEventListener('keydown', (e) => {
+            if (this.gameOver) return;
+            const key = e.key;
+            if (key === 'ArrowLeft') this.move(-1, 0);
+            else if (key === 'ArrowRight') this.move(1, 0);
+            else if (key === 'ArrowDown') this.move(0, 1);
+            else if (key === 'ArrowUp') this.rotate();
+            else if (key === ' ') {
+                e.preventDefault();
+                this.hardDrop();
+            }
+        });
+    }
+
+    spawnPiece() {
+        const idx = Math.floor(Math.random() * this.pieces.length);
+        const shape = this.pieces[idx].map(row => [...row]);
+        this.piece = {
+            shape: shape,
+            x: Math.floor((this.cols - shape[0].length) / 2),
+            y: 0,
+            color: this.colors[idx]
+        };
+        if (this.collision()) {
+            this.gameOver = true;
+            if (this.intervalId) clearInterval(this.intervalId);
+            this.onGameOverCallback();
+        }
+        this.draw();
+    }
+
+    collision() {
+        for (let y = 0; y < this.piece.shape.length; y++) {
+            for (let x = 0; x < this.piece.shape[y].length; x++) {
+                if (this.piece.shape[y][x] !== 0) {
+                    const boardX = this.piece.x + x;
+                    const boardY = this.piece.y + y;
+                    if (boardX < 0 || boardX >= this.cols || boardY >= this.rows || boardY < 0) return true;
+                    if (boardY >= 0 && this.board[boardY][boardX] !== 0) return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    merge() {
+        for (let y = 0; y < this.piece.shape.length; y++) {
+            for (let x = 0; x < this.piece.shape[y].length; x++) {
+                if (this.piece.shape[y][x] !== 0) {
+                    const boardY = this.piece.y + y;
+                    const boardX = this.piece.x + x;
+                    if (boardY >= 0 && boardY < this.rows) {
+                        this.board[boardY][boardX] = this.piece.color;
+                    }
+                }
+            }
+        }
+        this.clearLines();
+        this.spawnPiece();
+        this.draw();
+    }
+
+    clearLines() {
+        let linesCleared = 0;
+        for (let row = this.rows-1; row >= 0; ) {
+            let full = true;
+            for (let col = 0; col < this.cols; col++) {
+                if (this.board[row][col] === 0) {
+                    full = false;
+                    break;
+                }
+            }
+            if (full) {
+                for (let r = row; r > 0; r--) {
+                    this.board[r] = [...this.board[r-1]];
+                }
+                this.board[0] = Array(this.cols).fill(0);
+                linesCleared++;
+            } else {
+                row--;
+            }
+        }
+        if (linesCleared > 0) {
+            const points = [0, 40, 100, 300, 1200];
+            this.score += points[Math.min(linesCleared,4)];
+            this.lines += linesCleared;
+            this.onUpdateStats(this.lines, this.score);
+        }
+    }
+
+    move(dx, dy) {
+        this.piece.x += dx;
+        this.piece.y += dy;
+        if (this.collision()) {
+            this.piece.x -= dx;
+            this.piece.y -= dy;
+            if (dy === 1) {
+                this.merge();
+            }
+        }
+        this.draw();
+    }
+
+    rotate() {
+        const oldShape = this.piece.shape;
+        const rotated = oldShape[0].map((_, idx) => oldShape.map(row => row[idx]).reverse());
+        this.piece.shape = rotated;
+        if (this.collision()) {
+            this.piece.shape = oldShape;
+        }
+        this.draw();
+    }
+
+    hardDrop() {
+        while (!this.collision()) {
+            this.piece.y++;
+        }
+        this.piece.y--;
+        this.merge();
+    }
+
+    startLoop() {
+        this.intervalId = setInterval(() => {
+            if (!this.gameOver) {
+                this.move(0, 1);
+            }
+        }, 400);
+    }
+
+    draw() {
+        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        for (let row = 0; row < this.rows; row++) {
+            for (let col = 0; col < this.cols; col++) {
+                if (this.board[row][col] !== 0) {
+                    this.ctx.fillStyle = this.board[row][col];
+                    this.ctx.fillRect(col*this.cellSize, row*this.cellSize, this.cellSize-1, this.cellSize-1);
+                } else {
+                    this.ctx.fillStyle = '#1e293b';
+                    this.ctx.fillRect(col*this.cellSize, row*this.cellSize, this.cellSize-1, this.cellSize-1);
+                }
+            }
+        }
+        if (this.piece) {
+            for (let y = 0; y < this.piece.shape.length; y++) {
+                for (let x = 0; x < this.piece.shape[y].length; x++) {
+                    if (this.piece.shape[y][x]) {
+                        this.ctx.fillStyle = this.piece.color;
+                        this.ctx.fillRect((this.piece.x+x)*this.cellSize, (this.piece.y+y)*this.cellSize, this.cellSize-1, this.cellSize-1);
+                    }
+                }
+            }
+        }
+    }
+
+    reset() {
+        this.board = Array(this.rows).fill().map(() => Array(this.cols).fill(0));
+        this.score = 0;
+        this.lines = 0;
+        this.gameOver = false;
+        this.onUpdateStats(0,0);
+        if (this.intervalId) clearInterval(this.intervalId);
+        this.spawnPiece();
+        this.startLoop();
+    }
+}
+
+async function createRoom() {
+    sessionStorage.removeItem("reloaded");
+    myName = playerNameInput.value.trim();
+    if (!myName) {
+        alert("Digite seu nome!");
+        return;
+    }
+    myPlayerId = "player1";
+    const newRoom = db.ref("rooms").push();
+    roomId = newRoom.key;
+    await newRoom.set({
+        players: {
+            player1: { name: myName, lines: 0, score: 0, gameOver: false },
+            player2: { name: "✨ Esperando... ✨", lines: 0, score: 0, gameOver: false }
+        },
+        started: false
+    });
+    startGame();
+}
+
+async function joinRoom(roomIdFromUrl) {
+    myName = prompt("Digite seu nome:");
+    if (!myName) {
+        window.location.href = window.location.pathname;
+        return;
+    }
+    const roomRef = db.ref("rooms/" + roomIdFromUrl);
+    const snap = await roomRef.get();
+    const data = snap.val();
+    if (!data) {
+        alert("Sala não encontrada!");
+        window.location.href = window.location.pathname;
+        return;
+    }
+    if (data.players.player2.name !== "✨ Esperando... ✨") {
+        alert("Sala cheia!");
+        window.location.href = window.location.pathname;
+        return;
+    }
+    myPlayerId = "player2";
+    roomId = roomIdFromUrl;
+    await roomRef.child("players/player2").update({ name: myName, lines: 0, score: 0, gameOver: false });
+    startGame();
+}
+
+async function startGame() {
+    roomCodeSpan.innerText = `🏠 Sala: ${roomId}`;
+    waitingMsg.style.display = "block";
+    roomInfoDiv.style.display = "flex";
+    lobbyDiv.style.display = "none";
+    gameAreaDiv.style.display = "block";
+
+    gameRef = db.ref("rooms/" + roomId);
+    gameRef.on("value", (snapshot) => {
+        const data = snapshot.val();
+        if (!data) return;
+
+        p1NameSpan.innerText = data.players.player1.name;
+        p2NameSpan.innerText = data.players.player2.name;
+        p1LinesSpan.innerText = data.players.player1.lines;
+        p1ScoreSpan.innerText = data.players.player1.score;
+        p2LinesSpan.innerText = data.players.player2.lines;
+        p2ScoreSpan.innerText = data.players.player2.score;
+        p1Status.innerText = data.players.player1.gameOver ? "🔴 Perdeu" : "🟢 Jogando";
+        p2Status.innerText = data.players.player2.gameOver ? "🔴 Perdeu" : "🟢 Jogando";
+
+        if (data.players.player2.name !== "✨ Esperando... ✨" && !data.started) {
+            gameRef.update({ started: true });
+        }
+
+        if (data.started && !gameStarted) {
+            initTetris();
+            gameStarted = true;
+        }
+
+        if (data.players.player1.gameOver || data.players.player2.gameOver) {
+            if (tetris1) tetris1.gameOver = true;
+            if (tetris2) tetris2.gameOver = true;
+            if (tetris1 && tetris1.intervalId) clearInterval(tetris1.intervalId);
+            if (tetris2 && tetris2.intervalId) clearInterval(tetris2.intervalId);
+            
+            if (!data.players.player1.gameOver && data.players.player2.gameOver) {
+                winnerMsgSpan.innerText = `🏆 ${data.players.player1.name} venceu! 🎉`;
+                overlay.classList.add("show");
+            } else if (data.players.player1.gameOver && !data.players.player2.gameOver) {
+                winnerMsgSpan.innerText = `🏆 ${data.players.player2.name} venceu! 🎉`;
+                overlay.classList.add("show");
+            } else if (data.players.player1.gameOver && data.players.player2.gameOver) {
+                winnerMsgSpan.innerText = `🤝 Empate! Ambos perderam.`;
+                overlay.classList.add("show");
+            }
+        }
+    });
+}
+
+function initTetris() {
+    tetris1 = new TetrisGame("board1", (lines, score) => updateStats("player1", lines, score), () => gameOver("player1"));
+    tetris2 = new TetrisGame("board2", (lines, score) => updateStats("player2", lines, score), () => gameOver("player2"));
+}
+
+async function updateStats(player, lines, score) {
+    if (!roomId) return;
+    await gameRef.child(`players/${player}`).update({ lines, score });
+}
+
+async function gameOver(loser) {
+    await gameRef.child(`players/${loser}`).update({ gameOver: true });
+}
+
+async function restartGame() {
+    if (!roomId) return;
+    const snap = await gameRef.get();
+    const data = snap.val();
+    if (!data) return;
+    await gameRef.update({
+        players: {
+            player1: { name: data.players.player1.name, lines: 0, score: 0, gameOver: false },
+            player2: { name: data.players.player2.name, lines: 0, score: 0, gameOver: false }
+        },
+        started: true
+    });
+    if (tetris1) tetris1.reset();
+    if (tetris2) tetris2.reset();
+    overlay.classList.remove("show");
+    gameStarted = true;
+}
+
+function shareRoom() {
+    if (!roomId) return;
+    const link = `${window.location.origin}${window.location.pathname}?room=${roomId}`;
+    navigator.clipboard.writeText(link);
+    alert("Link copiado! Compartilhe com um amigo.");
+}
+
+createBtn.onclick = createRoom;
+shareBtn.onclick = shareRoom;
+resetBtn.onclick = restartGame;
+closeOverlayBtn.onclick = () => overlay.classList.remove("show");
+
+window.onload = () => {
+    if (!sessionStorage.getItem("reloaded")) {
+        sessionStorage.setItem("reloaded", "true");
+        location.reload();
+        return;
+    }
+    const roomParam = new URLSearchParams(window.location.search).get("room");
+    if (roomParam) {
+        joinRoom(roomParam);
+    }
+};
