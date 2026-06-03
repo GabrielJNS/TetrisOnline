@@ -10,16 +10,10 @@ const firebaseConfig = {
 
 firebase.initializeApp(firebaseConfig);
 firebase.auth().signInAnonymously();
+
 const db = firebase.database();
 
-let roomId = null;
-let myPlayerId = null;
-let gameRef = null;
-let tetris1 = null;
-let tetris2 = null;
-let gameStarted = false;
-let myName = "";
-
+// DOM elements
 const lobbyDiv = document.getElementById("lobby");
 const gameAreaDiv = document.getElementById("game-area");
 const createBtn = document.getElementById("create-room");
@@ -43,6 +37,15 @@ const overlay = document.getElementById("victory-overlay");
 const winnerMsgSpan = document.getElementById("winner-message");
 const closeOverlayBtn = document.getElementById("close-overlay");
 
+let roomId = null;
+let myPlayerId = null;
+let gameRef = null;
+let tetris1 = null;
+let tetris2 = null;
+let gameStarted = false;
+let myName = "";
+
+// ========== TETRIS ENGINE ==========
 class TetrisGame {
     constructor(canvasId, onUpdateStats, onGameOverCallback) {
         this.canvas = document.getElementById(canvasId);
@@ -78,7 +81,7 @@ class TetrisGame {
     }
 
     initControls() {
-        window.addEventListener('keydown', (e) => {
+        const handler = (e) => {
             if (this.gameOver) return;
             const key = e.key;
             if (key === 'ArrowLeft') this.move(-1, 0);
@@ -89,7 +92,8 @@ class TetrisGame {
                 e.preventDefault();
                 this.hardDrop();
             }
-        });
+        };
+        window.addEventListener('keydown', handler);
     }
 
     spawnPiece() {
@@ -204,7 +208,7 @@ class TetrisGame {
             if (!this.gameOver) {
                 this.move(0, 1);
             }
-        }, 400);
+        }, 420);
     }
 
     draw() {
@@ -215,7 +219,7 @@ class TetrisGame {
                     this.ctx.fillStyle = this.board[row][col];
                     this.ctx.fillRect(col*this.cellSize, row*this.cellSize, this.cellSize-1, this.cellSize-1);
                 } else {
-                    this.ctx.fillStyle = '#1e293b';
+                    this.ctx.fillStyle = '#0f1422';
                     this.ctx.fillRect(col*this.cellSize, row*this.cellSize, this.cellSize-1, this.cellSize-1);
                 }
             }
@@ -244,11 +248,12 @@ class TetrisGame {
     }
 }
 
+// ========== FIREBASE FUNCTIONS ==========
 async function createRoom() {
     sessionStorage.removeItem("reloaded");
-    myName = playerNameInput.value.trim();
+    myName = playerNameInput.value.trim().toUpperCase();
     if (!myName) {
-        alert("Digite seu nome!");
+        alert("DIGITE SEU NOME!");
         return;
     }
     myPlayerId = "player1";
@@ -257,7 +262,7 @@ async function createRoom() {
     await newRoom.set({
         players: {
             player1: { name: myName, lines: 0, score: 0, gameOver: false },
-            player2: { name: "✨ Esperando... ✨", lines: 0, score: 0, gameOver: false }
+            player2: { name: "---", lines: 0, score: 0, gameOver: false }
         },
         started: false
     });
@@ -265,7 +270,7 @@ async function createRoom() {
 }
 
 async function joinRoom(roomIdFromUrl) {
-    myName = prompt("Digite seu nome:");
+    myName = prompt("DIGITE SEU NOME:").toUpperCase();
     if (!myName) {
         window.location.href = window.location.pathname;
         return;
@@ -274,12 +279,12 @@ async function joinRoom(roomIdFromUrl) {
     const snap = await roomRef.get();
     const data = snap.val();
     if (!data) {
-        alert("Sala não encontrada!");
+        alert("SALA NÃO ENCONTRADA!");
         window.location.href = window.location.pathname;
         return;
     }
-    if (data.players.player2.name !== "✨ Esperando... ✨") {
-        alert("Sala cheia!");
+    if (data.players.player2.name !== "---") {
+        alert("SALA CHEIA!");
         window.location.href = window.location.pathname;
         return;
     }
@@ -290,7 +295,7 @@ async function joinRoom(roomIdFromUrl) {
 }
 
 async function startGame() {
-    roomCodeSpan.innerText = `🏠 Sala: ${roomId}`;
+    roomCodeSpan.innerText = `SALA: ${roomId}`;
     waitingMsg.style.display = "block";
     roomInfoDiv.style.display = "flex";
     lobbyDiv.style.display = "none";
@@ -307,10 +312,10 @@ async function startGame() {
         p1ScoreSpan.innerText = data.players.player1.score;
         p2LinesSpan.innerText = data.players.player2.lines;
         p2ScoreSpan.innerText = data.players.player2.score;
-        p1Status.innerText = data.players.player1.gameOver ? "🔴 Perdeu" : "🟢 Jogando";
-        p2Status.innerText = data.players.player2.gameOver ? "🔴 Perdeu" : "🟢 Jogando";
+        p1Status.innerText = data.players.player1.gameOver ? "🔴" : "🟢";
+        p2Status.innerText = data.players.player2.gameOver ? "🔴" : "🟢";
 
-        if (data.players.player2.name !== "✨ Esperando... ✨" && !data.started) {
+        if (data.players.player2.name !== "---" && !data.started) {
             gameRef.update({ started: true });
         }
 
@@ -319,20 +324,20 @@ async function startGame() {
             gameStarted = true;
         }
 
-        if (data.players.player1.gameOver || data.players.player2.gameOver) {
+        if ((data.players.player1.gameOver || data.players.player2.gameOver) && data.started) {
             if (tetris1) tetris1.gameOver = true;
             if (tetris2) tetris2.gameOver = true;
             if (tetris1 && tetris1.intervalId) clearInterval(tetris1.intervalId);
             if (tetris2 && tetris2.intervalId) clearInterval(tetris2.intervalId);
             
             if (!data.players.player1.gameOver && data.players.player2.gameOver) {
-                winnerMsgSpan.innerText = `🏆 ${data.players.player1.name} venceu! 🎉`;
+                winnerMsgSpan.innerText = `${data.players.player1.name} VENCEU! 🏆`;
                 overlay.classList.add("show");
             } else if (data.players.player1.gameOver && !data.players.player2.gameOver) {
-                winnerMsgSpan.innerText = `🏆 ${data.players.player2.name} venceu! 🎉`;
+                winnerMsgSpan.innerText = `${data.players.player2.name} VENCEU! 🏆`;
                 overlay.classList.add("show");
             } else if (data.players.player1.gameOver && data.players.player2.gameOver) {
-                winnerMsgSpan.innerText = `🤝 Empate! Ambos perderam.`;
+                winnerMsgSpan.innerText = `EMPATE! 🤝`;
                 overlay.classList.add("show");
             }
         }
@@ -340,6 +345,8 @@ async function startGame() {
 }
 
 function initTetris() {
+    if (tetris1) tetris1.reset();
+    if (tetris2) tetris2.reset();
     tetris1 = new TetrisGame("board1", (lines, score) => updateStats("player1", lines, score), () => gameOver("player1"));
     tetris2 = new TetrisGame("board2", (lines, score) => updateStats("player2", lines, score), () => gameOver("player2"));
 }
@@ -375,9 +382,10 @@ function shareRoom() {
     if (!roomId) return;
     const link = `${window.location.origin}${window.location.pathname}?room=${roomId}`;
     navigator.clipboard.writeText(link);
-    alert("Link copiado! Compartilhe com um amigo.");
+    alert("LINK COPIADO!");
 }
 
+// EVENT LISTENERS
 createBtn.onclick = createRoom;
 shareBtn.onclick = shareRoom;
 resetBtn.onclick = restartGame;
@@ -389,7 +397,7 @@ window.onload = () => {
         location.reload();
         return;
     }
-    const roomParam = new URLSearchParams(window.location.search).get("room");
+    const roomParam = new URLSearchParams(location.search).get("room");
     if (roomParam) {
         joinRoom(roomParam);
     }
