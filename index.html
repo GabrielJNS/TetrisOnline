@@ -3,70 +3,73 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Tetris Multiplayer - VS Online</title>
+    <title>Tetris Multiplayer - Arcade VS</title>
     <link rel="stylesheet" href="style.css">
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
 </head>
 <body>
-<div class="bg-gradient"></div>
-<div class="container">
-    <div class="game-card">
-        <div class="header">
-            <h1>🎮 Tetris Multiplayer</h1>
-            <p>VS — Quem perder primeiro, perde!</p>
-        </div>
+    <div class="arcade-bg"></div>
+    <div class="container">
+        <div class="arcade-cabinet">
+            <div class="screen">
+                <div id="lobby" class="lobby">
+                    <h1 class="arcade-title">TETRIS</h1>
+                    <h2 class="subtitle">MULTIPLAYER VS</h2>
+                    <input type="text" id="player-name" placeholder="SEU NOME" maxlength="15">
+                    <button id="create-room" class="arcade-btn">CRIAR SALA</button>
+                    <div id="room-info" class="room-info" style="display:none">
+                        <span id="room-code"></span>
+                        <button id="share-room" class="arcade-btn small">COMPARTILHAR</button>
+                    </div>
+                    <div id="waiting-msg" class="waiting" style="display:none">AGUARDANDO OPONENTE...</div>
+                </div>
 
-        <div id="lobby">
-            <input type="text" id="player-name" placeholder="Seu nome">
-            <button id="create-room">🚀 Criar Sala</button>
-            <div id="room-info" style="display:none; margin-top:15px;">
-                <span id="room-code"></span>
-                <button id="share-room">📎 Compartilhar</button>
-            </div>
-            <div id="waiting-msg" style="display:none;">Aguardando oponente...</div>
-        </div>
-
-        <div id="game-area" style="display:none;">
-            <div class="players-panel">
-                <div class="player-stats player1">
-                    <h3>👤 <span id="p1-name">Jogador 1</span></h3>
-                    <p>Linhas: <span id="p1-lines">0</span></p>
-                    <p>Pontos: <span id="p1-score">0</span></p>
-                    <div class="status" id="p1-status">🟢 Jogando</div>
+                <div id="game-area" class="game-area" style="display:none">
+                    <div class="vs-header">
+                        <div class="player-panel" id="panel-p1">
+                            <span class="player-name" id="p1-name">JOGADOR 1</span>
+                            <div class="stats">
+                                <div>LINES: <span id="p1-lines">0</span></div>
+                                <div>SCORE: <span id="p1-score">0</span></div>
+                            </div>
+                            <div class="status-led" id="p1-status">🟢</div>
+                        </div>
+                        <div class="vs-divider">VS</div>
+                        <div class="player-panel" id="panel-p2">
+                            <span class="player-name" id="p2-name">JOGADOR 2</span>
+                            <div class="stats">
+                                <div>LINES: <span id="p2-lines">0</span></div>
+                                <div>SCORE: <span id="p2-score">0</span></div>
+                            </div>
+                            <div class="status-led" id="p2-status">🟢</div>
+                        </div>
+                    </div>
+                    <div class="boards-container">
+                        <div class="board-wrapper">
+                            <canvas id="board1" width="300" height="600"></canvas>
+                        </div>
+                        <div class="board-wrapper">
+                            <canvas id="board2" width="300" height="600"></canvas>
+                        </div>
+                    </div>
+                    <div class="controls">
+                        <span>← → ↓  |  ↑ GIRAR  |  ESPAÇO QUEDA</span>
+                    </div>
+                    <button id="reset-game" class="arcade-btn reset">NOVA RODADA</button>
                 </div>
-                <div class="player-stats player2">
-                    <h3>👥 <span id="p2-name">Jogador 2</span></h3>
-                    <p>Linhas: <span id="p2-lines">0</span></p>
-                    <p>Pontos: <span id="p2-score">0</span></p>
-                    <div class="status" id="p2-status">🟢 Jogando</div>
-                </div>
             </div>
-            <div class="tetris-boards">
-                <div class="board-container">
-                    <canvas id="board1" width="300" height="600"></canvas>
-                </div>
-                <div class="vs">⚔️ VS ⚔️</div>
-                <div class="board-container">
-                    <canvas id="board2" width="300" height="600"></canvas>
-                </div>
-            </div>
-            <div class="controls-info">
-                ← → ↓ mover | ↑ girar | Espaço: queda rápida
-            </div>
-            <button id="reset-game" class="reset-btn">🔄 Nova Rodada</button>
         </div>
     </div>
-</div>
 
-<div id="victory-overlay">
-    <div class="victory-box">
-        <h2 id="winner-message"></h2>
-        <button id="close-overlay">💖 Fechar</button>
+    <div id="victory-overlay">
+        <div class="victory-card">
+            <h2 id="winner-message"></h2>
+            <button id="close-overlay" class="arcade-btn">FECHAR</button>
+        </div>
     </div>
-</div>
 
-<script src="script.js"></script>
+    <script src="script.js"></script>
 </body>
 </html>
