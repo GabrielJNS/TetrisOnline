@@ -9,7 +9,6 @@ const firebaseConfig = {
 };
 
 firebase.initializeApp(firebaseConfig);
-firebase.auth().signInAnonymously();
 
 const db = firebase.database();
 
@@ -46,14 +45,12 @@ let myName = "";
 let keyHandler = null;
 let firebaseReady = false;
 
-firebase.auth().onAuthStateChanged((user) => {
-    if (user) {
-        firebaseReady = true;
-        const roomParam = new URLSearchParams(location.search).get("room");
-        if (roomParam && !sessionStorage.getItem("joined")) {
-            sessionStorage.setItem("joined", "true");
-            joinRoom(roomParam);
-        }
+firebase.auth().signInAnonymously().then(() => {
+    firebaseReady = true;
+    const roomParam = new URLSearchParams(location.search).get("room");
+    if (roomParam && !sessionStorage.getItem("joined")) {
+        sessionStorage.setItem("joined", "true");
+        joinRoom(roomParam);
     }
 });
 
@@ -451,11 +448,12 @@ closeOverlayBtn.onclick = () => {
     overlay.classList.remove("show");
 };
 
-window.onload = () => {
-    if (!sessionStorage.getItem("reloaded")) {
+window.onload = function() {
+    const roomParam = new URLSearchParams(location.search).get("room");
+    if (!roomParam && !sessionStorage.getItem("reloaded")) {
         sessionStorage.setItem("reloaded", "true");
         location.reload();
-        return;
+    } else if (!roomParam) {
+        sessionStorage.removeItem("reloaded");
     }
-    sessionStorage.removeItem("reloaded");
 };
