@@ -13,7 +13,6 @@ firebase.auth().signInAnonymously();
 
 const db = firebase.database();
 
-// DOM elements
 const lobbyDiv = document.getElementById("lobby");
 const gameAreaDiv = document.getElementById("game-area");
 const createBtn = document.getElementById("create-room");
@@ -44,8 +43,20 @@ let tetris1 = null;
 let tetris2 = null;
 let gameStarted = false;
 let myName = "";
+let keyHandler = null;
+let firebaseReady = false;
 
-// ========== TETRIS ENGINE ==========
+firebase.auth().onAuthStateChanged((user) => {
+    if (user) {
+        firebaseReady = true;
+        const roomParam = new URLSearchParams(location.search).get("room");
+        if (roomParam && !sessionStorage.getItem("joined")) {
+            sessionStorage.setItem("joined", "true");
+            joinRoom(roomParam);
+        }
+    }
+});
+
 class TetrisGame {
     constructor(canvasId, onUpdateStats, onGameOverCallback) {
         this.canvas = document.getElementById(canvasId);
@@ -63,6 +74,7 @@ class TetrisGame {
         this.lines = 0;
         this.gameOver = false;
         this.intervalId = null;
+        this.isActive = false;
 
         this.pieces = [
             [[1,1,1,1]],
@@ -75,14 +87,17 @@ class TetrisGame {
         ];
         this.colors = ['#00e5f0', '#f0e000', '#c084fc', '#f97316', '#3b82f6', '#10b981', '#ef4444'];
 
-        this.initControls();
         this.spawnPiece();
         this.startLoop();
     }
 
     initControls() {
-        const handler = (e) => {
-            if (this.gameOver) return;
+        if (keyHandler) {
+            window.removeEventListener('keydown', keyHandler);
+        }
+        
+        keyHandler = (e) => {
+            if (this.gameOver || !this.isActive) return;
             const key = e.key;
             if (key === 'ArrowLeft') this.move(-1, 0);
             else if (key === 'ArrowRight') this.move(1, 0);
@@ -93,7 +108,7 @@ class TetrisGame {
                 this.hardDrop();
             }
         };
-        window.addEventListener('keydown', handler);
+        window.addEventListener('keydown', keyHandler);
     }
 
     spawnPiece() {
@@ -173,6 +188,7 @@ class TetrisGame {
     }
 
     move(dx, dy) {
+        if (this.gameOver) return;
         this.piece.x += dx;
         this.piece.y += dy;
         if (this.collision()) {
@@ -186,6 +202,7 @@ class TetrisGame {
     }
 
     rotate() {
+        if (this.gameOver) return;
         const oldShape = this.piece.shape;
         const rotated = oldShape[0].map((_, idx) => oldShape.map(row => row[idx]).reverse());
         this.piece.shape = rotated;
@@ -196,6 +213,7 @@ class TetrisGame {
     }
 
     hardDrop() {
+        if (this.gameOver) return;
         while (!this.collision()) {
             this.piece.y++;
         }
@@ -204,11 +222,26 @@ class TetrisGame {
     }
 
     startLoop() {
+        if (this.intervalId) clearInterval(this.intervalId);
+        this.isActive = true;
         this.intervalId = setInterval(() => {
-            if (!this.gameOver) {
+            if (!this.gameOver && this.isActive) {
                 this.move(0, 1);
             }
         }, 420);
+        this.initControls();
+    }
+
+    stopLoop() {
+        this.isActive = false;
+        if (this.intervalId) {
+            clearInterval(this.intervalId);
+            this.intervalId = null;
+        }
+        if (keyHandler) {
+            window.removeEventListener('keydown', keyHandler);
+            keyHandler = null;
+        }
     }
 
     draw() {
@@ -237,20 +270,22 @@ class TetrisGame {
     }
 
     reset() {
+        this.stopLoop();
         this.board = Array(this.rows).fill().map(() => Array(this.cols).fill(0));
         this.score = 0;
         this.lines = 0;
         this.gameOver = false;
         this.onUpdateStats(0,0);
-        if (this.intervalId) clearInterval(this.intervalId);
         this.spawnPiece();
         this.startLoop();
     }
 }
 
-// ========== FIREBASE FUNCTIONS ==========
 async function createRoom() {
-    sessionStorage.removeItem("reloaded");
+    if (!firebaseReady) {
+        alert("Aguardando conexão com Firebase...");
+        return;
+    }
     myName = playerNameInput.value.trim().toUpperCase();
     if (!myName) {
         alert("DIGITE SEU NOME!");
@@ -270,6 +305,10 @@ async function createRoom() {
 }
 
 async function joinRoom(roomIdFromUrl) {
+    if (!firebaseReady) {
+        setTimeout(() => joinRoom(roomIdFromUrl), 500);
+        return;
+    }
     myName = prompt("DIGITE SEU NOME:").toUpperCase();
     if (!myName) {
         window.location.href = window.location.pathname;
@@ -322,31 +361,42 @@ async function startGame() {
         if (data.started && !gameStarted) {
             initTetris();
             gameStarted = true;
+            waitingMsg.style.display = "none";
         }
 
-        if ((data.players.player1.gameOver || data.players.player2.gameOver) && data.started) {
-            if (tetris1) tetris1.gameOver = true;
-            if (tetris2) tetris2.gameOver = true;
-            if (tetris1 && tetris1.intervalId) clearInterval(tetris1.intervalId);
-            if (tetris2 && tetris2.intervalId) clearInterval(tetris2.intervalId);
+        if (data.started && gameStarted) {
+            const p1GameOver = data.players.player1.gameOver;
+            const p2GameOver = data.players.player2.gameOver;
             
-            if (!data.players.player1.gameOver && data.players.player2.gameOver) {
-                winnerMsgSpan.innerText = `${data.players.player1.name} VENCEU! 🏆`;
-                overlay.classList.add("show");
-            } else if (data.players.player1.gameOver && !data.players.player2.gameOver) {
-                winnerMsgSpan.innerText = `${data.players.player2.name} VENCEU! 🏆`;
-                overlay.classList.add("show");
-            } else if (data.players.player1.gameOver && data.players.player2.gameOver) {
-                winnerMsgSpan.innerText = `EMPATE! 🤝`;
-                overlay.classList.add("show");
+            if (p1GameOver || p2GameOver) {
+                if (tetris1) tetris1.stopLoop();
+                if (tetris2) tetris2.stopLoop();
+                
+                if (!p1GameOver && p2GameOver) {
+                    winnerMsgSpan.innerText = `${data.players.player1.name} VENCEU! 🏆`;
+                    overlay.classList.add("show");
+                } else if (p1GameOver && !p2GameOver) {
+                    winnerMsgSpan.innerText = `${data.players.player2.name} VENCEU! 🏆`;
+                    overlay.classList.add("show");
+                } else if (p1GameOver && p2GameOver) {
+                    winnerMsgSpan.innerText = `EMPATE! 🤝`;
+                    overlay.classList.add("show");
+                }
             }
         }
     });
 }
 
 function initTetris() {
-    if (tetris1) tetris1.reset();
-    if (tetris2) tetris2.reset();
+    if (tetris1) {
+        tetris1.stopLoop();
+        tetris1.reset();
+    }
+    if (tetris2) {
+        tetris2.stopLoop();
+        tetris2.reset();
+    }
+    
     tetris1 = new TetrisGame("board1", (lines, score) => updateStats("player1", lines, score), () => gameOver("player1"));
     tetris2 = new TetrisGame("board2", (lines, score) => updateStats("player2", lines, score), () => gameOver("player2"));
 }
@@ -365,6 +415,9 @@ async function restartGame() {
     const snap = await gameRef.get();
     const data = snap.val();
     if (!data) return;
+    
+    overlay.classList.remove("show");
+    
     await gameRef.update({
         players: {
             player1: { name: data.players.player1.name, lines: 0, score: 0, gameOver: false },
@@ -372,9 +425,15 @@ async function restartGame() {
         },
         started: true
     });
-    if (tetris1) tetris1.reset();
-    if (tetris2) tetris2.reset();
-    overlay.classList.remove("show");
+    
+    if (tetris1) {
+        tetris1.stopLoop();
+        tetris1.reset();
+    }
+    if (tetris2) {
+        tetris2.stopLoop();
+        tetris2.reset();
+    }
     gameStarted = true;
 }
 
@@ -385,11 +444,12 @@ function shareRoom() {
     alert("LINK COPIADO!");
 }
 
-// EVENT LISTENERS
 createBtn.onclick = createRoom;
 shareBtn.onclick = shareRoom;
 resetBtn.onclick = restartGame;
-closeOverlayBtn.onclick = () => overlay.classList.remove("show");
+closeOverlayBtn.onclick = () => {
+    overlay.classList.remove("show");
+};
 
 window.onload = () => {
     if (!sessionStorage.getItem("reloaded")) {
@@ -397,8 +457,5 @@ window.onload = () => {
         location.reload();
         return;
     }
-    const roomParam = new URLSearchParams(location.search).get("room");
-    if (roomParam) {
-        joinRoom(roomParam);
-    }
+    sessionStorage.removeItem("reloaded");
 };
