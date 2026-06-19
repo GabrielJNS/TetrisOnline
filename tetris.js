@@ -45,15 +45,22 @@ let myName = "";
 let keyHandler = null;
 let firebaseReady = false;
 
-firebase.auth().signInAnonymously().then(() => {
-    firebaseReady = true;
-    const roomParam = new URLSearchParams(location.search).get("room");
-    if (roomParam) {
-        joinRoom(roomParam);
-    }
-}).catch((error) => {
-    console.error("Erro ao autenticar:", error);
-});
+firebase.auth().signInAnonymously()
+    .then(() => {
+        firebaseReady = true;
+        const roomParam = new URLSearchParams(location.search).get("room");
+        if (roomParam) {
+            joinRoom(roomParam);
+        }
+    })
+    .catch((error) => {
+        firebaseReady = true;
+        console.error("Erro na autenticação:", error);
+        const roomParam = new URLSearchParams(location.search).get("room");
+        if (roomParam) {
+            joinRoom(roomParam);
+        }
+    });
 
 class TetrisGame {
     constructor(canvasId, onUpdateStats, onGameOverCallback) {
@@ -448,3 +455,6 @@ resetBtn.onclick = restartGame;
 closeOverlayBtn.onclick = () => {
     overlay.classList.remove("show");
 };
+
+console.log("Firebase Ready:", firebaseReady);
+console.log("App iniciado!");
