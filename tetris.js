@@ -48,10 +48,11 @@ let firebaseReady = false;
 firebase.auth().signInAnonymously().then(() => {
     firebaseReady = true;
     const roomParam = new URLSearchParams(location.search).get("room");
-    if (roomParam && !sessionStorage.getItem("joined")) {
-        sessionStorage.setItem("joined", "true");
+    if (roomParam) {
         joinRoom(roomParam);
     }
+}).catch((error) => {
+    console.error("Erro ao autenticar:", error);
 });
 
 class TetrisGame {
@@ -446,14 +447,4 @@ shareBtn.onclick = shareRoom;
 resetBtn.onclick = restartGame;
 closeOverlayBtn.onclick = () => {
     overlay.classList.remove("show");
-};
-
-window.onload = function() {
-    const roomParam = new URLSearchParams(location.search).get("room");
-    if (!roomParam && !sessionStorage.getItem("reloaded")) {
-        sessionStorage.setItem("reloaded", "true");
-        location.reload();
-    } else if (!roomParam) {
-        sessionStorage.removeItem("reloaded");
-    }
 };
