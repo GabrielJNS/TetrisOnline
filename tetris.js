@@ -32,6 +32,8 @@ const overlay = document.getElementById("victory-overlay");
 const winnerMsgSpan = document.getElementById("winner-message");
 const rankingDisplay = document.getElementById("ranking-display");
 const closeOverlayBtn = document.getElementById("close-overlay");
+const shareLinkInput = document.getElementById("share-link");
+const linkDisplayDiv = document.getElementById("link-display");
 
 let roomId = null;
 let myPlayerId = null;
@@ -322,7 +324,7 @@ async function createRoom() {
     }
     await newRoom.set({
         players: players,
-        started: false,
+        started: totalPlayers === 1 ? true : false,
         gameOver: false,
         mode: gameMode,
         totalPlayers: totalPlayers,
@@ -331,6 +333,7 @@ async function createRoom() {
         createdAt: Date.now()
     });
     startGame();
+    showShareLink();
 }
 
 async function joinRoom(id) {
@@ -413,6 +416,25 @@ function startGame() {
             checkGameOver(data);
         }
     });
+
+    if (totalPlayers === 1 && !gameStarted) {
+        gameRef.once("value", (snapshot) => {
+            const data = snapshot.val();
+            if (data && data.started && !gameStarted) {
+                initAllTetris(data);
+                gameStarted = true;
+                waitingMsg.style.display = "none";
+                playersListDiv.style.display = "none";
+            }
+        });
+    }
+}
+
+function showShareLink() {
+    if (!roomId) return;
+    const link = window.location.origin + window.location.pathname + "?room=" + roomId;
+    shareLinkInput.value = link;
+    linkDisplayDiv.style.display = "block";
 }
 
 function countPlayers(data) {
@@ -453,7 +475,6 @@ function updatePlayersList(data) {
 }
 
 function updateGameUI() {
-    const modeNames = { solo: "SOLO", '2players': "2 JOGADORES", '3players': "3 JOGADORES", '4players': "4 JOGADORES" };
     vsDivider.innerText = gameMode === "solo" ? "SOLO" : "VS";
     for (let i = 1; i <= 4; i++) {
         const panel = document.getElementById(`panel-p${i}`);
@@ -466,6 +487,7 @@ function updateGameUI() {
         }
     }
     const controlTexts = {
+        'solo': 'JOGADOR 1: ← → ↓ | ↑ GIRAR | ESPAÇO QUEDA',
         '2players': 'JOGADOR 1: ← → ↓ | ↑ GIRAR | ESPAÇO QUEDA | JOGADOR 2: A S D | W GIRAR | Q QUEDA',
         '3players': 'P1: ← → ↓ | ↑ | ESPAÇO | P2: A S D | W | Q | P3: J K L | I | U',
         '4players': 'P1: ← → ↓ | ↑ | ESPAÇO | P2: A S D | W | Q | P3: J K L | I | U | P4: F G H | R | T'
@@ -592,15 +614,35 @@ async function restartGame() {
 function shareRoom() {
     if (!roomId) return;
     const link = window.location.origin + window.location.pathname + "?room=" + roomId;
-    navigator.clipboard.writeText(link);
-    alert("LINK COPIADO! Compartilhe com seus amigos!");
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(link).then(() => {
+            alert("LINK COPIADO! Compartilhe com seus amigos!");
+        }).catch(() => {
+            fallbackCopy(link);
+        });
+    } else {
+        fallbackCopy(link);
+    }
+}
+
+function fallbackCopy(text) {
+    const textarea = document.createElement("textarea");
+    textarea.value = text;
+    document.body.appendChild(textarea);
+    textarea.select();
+    try {
+        document.execCommand("copy");
+        alert("LINK COPIADO! Compartilhe com seus amigos!");
+    } catch (e) {
+        alert("Copie o link manualmente: " + text);
+    }
+    document.body.removeChild(textarea);
 }
 
 function exitGame() {
     if (confirm("Tem certeza que quer sair?")) {
         if (roomId && myPlayerId) {
-            gameRef.child(`players/${myPlayerId}`).update({ disconnected: true });
-            gameRef.child(`players/${myPlayerId}`).update({ name: "---" });
+            gameRef.child(`players/${myPlayerId}`).update({ disconnected: true, name: "---" });
         }
         window.location.href = window.location.pathname;
     }
