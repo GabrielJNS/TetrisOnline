@@ -18,34 +18,30 @@ const gameAreaDiv = document.getElementById("game-area");
 const createBtn = document.getElementById("create-room");
 const shareBtn = document.getElementById("share-room");
 const resetBtn = document.getElementById("reset-game");
+const exitBtn = document.getElementById("exit-game");
 const playerNameInput = document.getElementById("player-name");
 const roomCodeSpan = document.getElementById("room-code");
 const waitingMsg = document.getElementById("waiting-msg");
 const roomInfoDiv = document.getElementById("room-info");
-
-const p1NameSpan = document.getElementById("p1-name");
-const p2NameSpan = document.getElementById("p2-name");
-const p1LinesSpan = document.getElementById("p1-lines");
-const p1ScoreSpan = document.getElementById("p1-score");
-const p2LinesSpan = document.getElementById("p2-lines");
-const p2ScoreSpan = document.getElementById("p2-score");
-const p1Status = document.getElementById("p1-status");
-const p2Status = document.getElementById("p2-status");
-
+const playersListDiv = document.getElementById("players-list");
+const playersCountSpan = document.getElementById("players-count");
+const gameModeSelect = document.getElementById("game-mode");
+const controlsText = document.getElementById("controls-text");
+const vsDivider = document.getElementById("vs-divider");
 const overlay = document.getElementById("victory-overlay");
 const winnerMsgSpan = document.getElementById("winner-message");
+const rankingDisplay = document.getElementById("ranking-display");
 const closeOverlayBtn = document.getElementById("close-overlay");
 
 let roomId = null;
 let myPlayerId = null;
 let gameRef = null;
-let tetris1 = null;
-let tetris2 = null;
+let tetrisGames = {};
 let gameStarted = false;
 let myName = "";
-let keyHandler1 = null;
-let keyHandler2 = null;
-let gameLoopInterval = null;
+let keyHandlers = {};
+let gameMode = "2players";
+let totalPlayers = 2;
 
 window.onload = () => {
     if (!sessionStorage.getItem("reloaded")) {
@@ -60,12 +56,13 @@ window.onload = () => {
 };
 
 class TetrisGame {
-    constructor(canvasId, onUpdateStats, onGameOverCallback, playerId) {
+    constructor(canvasId, onUpdateStats, onGameOverCallback, playerId, playerIndex) {
         this.canvas = document.getElementById(canvasId);
         this.ctx = this.canvas.getContext('2d');
         this.onUpdateStats = onUpdateStats;
         this.onGameOverCallback = onGameOverCallback;
         this.playerId = playerId;
+        this.playerIndex = playerIndex;
 
         this.cols = 10;
         this.rows = 20;
@@ -96,41 +93,41 @@ class TetrisGame {
     }
 
     initControls() {
-        if (this.playerId === "player1" && keyHandler1) {
-            window.removeEventListener('keydown', keyHandler1);
+        if (keyHandlers[this.playerId]) {
+            window.removeEventListener('keydown', keyHandlers[this.playerId]);
         }
-        if (this.playerId === "player2" && keyHandler2) {
-            window.removeEventListener('keydown', keyHandler2);
-        }
+
+        const controlSets = {
+            player1: { left: 'ArrowLeft', right: 'ArrowRight', down: 'ArrowDown', rotate: 'ArrowUp', drop: ' ' },
+            player2: { left: 'a', right: 'd', down: 's', rotate: 'w', drop: 'q' },
+            player3: { left: 'j', right: 'l', down: 'k', rotate: 'i', drop: 'u' },
+            player4: { left: 'f', right: 'h', down: 'g', rotate: 'r', drop: 't' }
+        };
+
+        const controls = controlSets[this.playerId] || controlSets.player1;
 
         const handler = (e) => {
             if (this.gameOver || !this.isActive) return;
-            
-            if (this.playerId === "player1") {
-                switch(e.key) {
-                    case 'ArrowLeft': e.preventDefault(); this.move(-1, 0); break;
-                    case 'ArrowRight': e.preventDefault(); this.move(1, 0); break;
-                    case 'ArrowDown': e.preventDefault(); this.move(0, 1); break;
-                    case 'ArrowUp': e.preventDefault(); this.rotate(); break;
-                    case ' ': e.preventDefault(); this.hardDrop(); break;
-                }
-            }
-            else if (this.playerId === "player2") {
-                switch(e.key.toLowerCase()) {
-                    case 'a': e.preventDefault(); this.move(-1, 0); break;
-                    case 'd': e.preventDefault(); this.move(1, 0); break;
-                    case 's': e.preventDefault(); this.move(0, 1); break;
-                    case 'w': e.preventDefault(); this.rotate(); break;
-                    case 'q': e.preventDefault(); this.hardDrop(); break;
-                }
+            const key = e.key.toLowerCase();
+            if (key === controls.left || e.key === controls.left) {
+                e.preventDefault();
+                this.move(-1, 0);
+            } else if (key === controls.right || e.key === controls.right) {
+                e.preventDefault();
+                this.move(1, 0);
+            } else if (key === controls.down || e.key === controls.down) {
+                e.preventDefault();
+                this.move(0, 1);
+            } else if (key === controls.rotate || e.key === controls.rotate) {
+                e.preventDefault();
+                this.rotate();
+            } else if (key === controls.drop || e.key === controls.drop) {
+                e.preventDefault();
+                this.hardDrop();
             }
         };
 
-        if (this.playerId === "player1") {
-            keyHandler1 = handler;
-        } else {
-            keyHandler2 = handler;
-        }
+        keyHandlers[this.playerId] = handler;
         window.addEventListener('keydown', handler);
     }
 
@@ -248,7 +245,6 @@ class TetrisGame {
         if (this.intervalId) clearInterval(this.intervalId);
         this.isActive = true;
         this.initControls();
-        
         const loop = () => {
             if (!this.isActive || this.gameOver) return;
             this.move(0, 1);
@@ -263,13 +259,9 @@ class TetrisGame {
             clearTimeout(this.intervalId);
             this.intervalId = null;
         }
-        if (this.playerId === "player1" && keyHandler1) {
-            window.removeEventListener('keydown', keyHandler1);
-            keyHandler1 = null;
-        }
-        if (this.playerId === "player2" && keyHandler2) {
-            window.removeEventListener('keydown', keyHandler2);
-            keyHandler2 = null;
+        if (keyHandlers[this.playerId]) {
+            window.removeEventListener('keydown', keyHandlers[this.playerId]);
+            delete keyHandlers[this.playerId];
         }
     }
 
@@ -318,16 +310,31 @@ async function createRoom() {
         alert("DIGITE SEU NOME!");
         return;
     }
+    gameMode = gameModeSelect.value;
+    const modeMap = { solo: 1, '2players': 2, '3players': 3, '4players': 4 };
+    totalPlayers = modeMap[gameMode] || 2;
     myPlayerId = "player1";
     const newRoom = db.ref("rooms").push();
     roomId = newRoom.key;
+    const players = {};
+    for (let i = 1; i <= totalPlayers; i++) {
+        players[`player${i}`] = {
+            name: i === 1 ? myName : "---",
+            lines: 0,
+            score: 0,
+            gameOver: false,
+            disconnected: false
+        };
+    }
     await newRoom.set({
-        players: {
-            player1: { name: myName, lines: 0, score: 0, gameOver: false },
-            player2: { name: "---", lines: 0, score: 0, gameOver: false }
-        },
+        players: players,
         started: false,
-        gameOver: false
+        gameOver: false,
+        mode: gameMode,
+        totalPlayers: totalPlayers,
+        winner: null,
+        ranking: [],
+        createdAt: Date.now()
     });
     startGame();
 }
@@ -335,6 +342,7 @@ async function createRoom() {
 async function joinRoom(id) {
     myName = prompt("DIGITE SEU NOME:").toUpperCase();
     if (!myName) {
+        window.location.href = window.location.pathname;
         return;
     }
     const ref = db.ref("rooms/" + id);
@@ -345,14 +353,29 @@ async function joinRoom(id) {
         window.location.href = window.location.pathname;
         return;
     }
-    if (data.players.player2.name !== "---") {
+    let playerSlot = null;
+    for (let i = 1; i <= data.totalPlayers; i++) {
+        if (data.players[`player${i}`].name === "---") {
+            playerSlot = `player${i}`;
+            break;
+        }
+    }
+    if (!playerSlot) {
         alert("SALA CHEIA!");
         window.location.href = window.location.pathname;
         return;
     }
-    await ref.child("players/player2").update({ name: myName, lines: 0, score: 0, gameOver: false });
-    myPlayerId = "player2";
+    myPlayerId = playerSlot;
     roomId = id;
+    gameMode = data.mode;
+    totalPlayers = data.totalPlayers;
+    await ref.child(`players/${playerSlot}`).update({
+        name: myName,
+        lines: 0,
+        score: 0,
+        gameOver: false,
+        disconnected: false
+    });
     startGame();
 }
 
@@ -362,77 +385,101 @@ function startGame() {
     roomInfoDiv.style.display = "flex";
     lobbyDiv.style.display = "none";
     gameAreaDiv.style.display = "block";
+    updateGameUI();
+    setupTouchControls();
 
     gameRef = db.ref("rooms/" + roomId);
     gameRef.on("value", (snapshot) => {
         const data = snapshot.val();
         if (!data) return;
-
-        p1NameSpan.innerText = data.players.player1.name;
-        p2NameSpan.innerText = data.players.player2.name;
-        p1LinesSpan.innerText = data.players.player1.lines;
-        p1ScoreSpan.innerText = data.players.player1.score;
-        p2LinesSpan.innerText = data.players.player2.lines;
-        p2ScoreSpan.innerText = data.players.player2.score;
-        p1Status.innerText = data.players.player1.gameOver ? "🔴" : "🟢";
-        p2Status.innerText = data.players.player2.gameOver ? "🔴" : "🟢";
-
-        if (data.players.player2.name !== "---" && !data.started) {
+        updatePlayerUI(data);
+        updatePlayersList(data);
+        playersCountSpan.innerText = `${countPlayers(data)}/${data.totalPlayers}`;
+        if (countPlayers(data) === data.totalPlayers && !data.started) {
             gameRef.update({ started: true });
         }
-
         if (data.started && !gameStarted) {
-            initTetris();
+            initAllTetris(data);
             gameStarted = true;
             waitingMsg.style.display = "none";
+            playersListDiv.style.display = "none";
         }
-
         if (data.started && gameStarted) {
-            const p1GameOver = data.players.player1.gameOver;
-            const p2GameOver = data.players.player2.gameOver;
-            
-            if (p1GameOver || p2GameOver) {
-                if (tetris1) tetris1.stopLoop();
-                if (tetris2) tetris2.stopLoop();
-                
-                if (!p1GameOver && p2GameOver) {
-                    winnerMsgSpan.innerText = `${data.players.player1.name} VENCEU! 🏆`;
-                    overlay.classList.add("show");
-                } else if (p1GameOver && !p2GameOver) {
-                    winnerMsgSpan.innerText = `${data.players.player2.name} VENCEU! 🏆`;
-                    overlay.classList.add("show");
-                } else if (p1GameOver && p2GameOver) {
-                    winnerMsgSpan.innerText = `EMPATE! 🤝`;
-                    overlay.classList.add("show");
-                }
-            }
+            checkGameOver(data);
         }
     });
 }
 
-function initTetris() {
-    if (tetris1) {
-        tetris1.stopLoop();
-        tetris1 = null;
+function countPlayers(data) {
+    let count = 0;
+    for (let i = 1; i <= data.totalPlayers; i++) {
+        if (data.players[`player${i}`].name !== "---") count++;
     }
-    if (tetris2) {
-        tetris2.stopLoop();
-        tetris2 = null;
+    return count;
+}
+
+function updatePlayerUI(data) {
+    for (let i = 1; i <= data.totalPlayers; i++) {
+        const player = data.players[`player${i}`];
+        const nameSpan = document.getElementById(`p${i}-name`);
+        const linesSpan = document.getElementById(`p${i}-lines`);
+        const scoreSpan = document.getElementById(`p${i}-score`);
+        const statusSpan = document.getElementById(`p${i}-status`);
+        if (nameSpan) nameSpan.innerText = player.name;
+        if (linesSpan) linesSpan.innerText = player.lines;
+        if (scoreSpan) scoreSpan.innerText = player.score;
+        if (statusSpan) statusSpan.innerText = player.gameOver ? "🔴" : player.disconnected ? "⚫" : "🟢";
     }
-    
-    tetris1 = new TetrisGame(
-        "board1", 
-        (lines, score) => updateStats("player1", lines, score), 
-        () => gameOver("player1"),
-        "player1"
-    );
-    
-    tetris2 = new TetrisGame(
-        "board2", 
-        (lines, score) => updateStats("player2", lines, score), 
-        () => gameOver("player2"),
-        "player2"
-    );
+}
+
+function updatePlayersList(data) {
+    let html = "<div style='color:#88ccff;margin-top:10px;'>JOGADORES NA SALA:</div>";
+    for (let i = 1; i <= data.totalPlayers; i++) {
+        const player = data.players[`player${i}`];
+        const status = player.gameOver ? "🔴" : player.disconnected ? "⚫" : "🟢";
+        html += `<div style="color:#ffcc33;padding:5px;">${status} ${player.name} ${player.name === "---" ? "👤" : ""}</div>`;
+    }
+    playersListDiv.innerHTML = html;
+    playersListDiv.style.display = "block";
+}
+
+function updateGameUI() {
+    const modeNames = { solo: "SOLO", '2players': "2 JOGADORES", '3players': "3 JOGADORES", '4players': "4 JOGADORES" };
+    vsDivider.innerText = gameMode === "solo" ? "SOLO" : "VS";
+    for (let i = 1; i <= 4; i++) {
+        const panel = document.getElementById(`panel-p${i}`);
+        if (panel) {
+            panel.style.display = i <= totalPlayers ? "block" : "none";
+        }
+        const wrapper = document.getElementById(`board${i}`)?.parentElement;
+        if (wrapper) {
+            wrapper.style.display = i <= totalPlayers ? "block" : "none";
+        }
+    }
+    const controlTexts = {
+        '2players': 'JOGADOR 1: ← → ↓ | ↑ GIRAR | ESPAÇO QUEDA | JOGADOR 2: A S D | W GIRAR | Q QUEDA',
+        '3players': 'P1: ← → ↓ | ↑ | ESPAÇO | P2: A S D | W | Q | P3: J K L | I | U',
+        '4players': 'P1: ← → ↓ | ↑ | ESPAÇO | P2: A S D | W | Q | P3: J K L | I | U | P4: F G H | R | T'
+    };
+    controlsText.innerText = controlTexts[gameMode] || controlTexts['2players'];
+}
+
+function initAllTetris(data) {
+    for (const key in tetrisGames) {
+        tetrisGames[key].stopLoop();
+        delete tetrisGames[key];
+    }
+    for (let i = 1; i <= totalPlayers; i++) {
+        const playerId = `player${i}`;
+        const canvasId = `board${i}`;
+        tetrisGames[playerId] = new TetrisGame(
+            canvasId,
+            (lines, score) => updateStats(playerId, lines, score),
+            () => gameOver(playerId),
+            playerId,
+            i
+        );
+    }
 }
 
 async function updateStats(player, lines, score) {
@@ -444,40 +491,94 @@ async function gameOver(loser) {
     await gameRef.child(`players/${loser}`).update({ gameOver: true });
 }
 
+function checkGameOver(data) {
+    let allGameOver = true;
+    let activePlayers = 0;
+    let gameOverPlayers = [];
+    for (let i = 1; i <= totalPlayers; i++) {
+        const player = data.players[`player${i}`];
+        if (player.name !== "---") {
+            if (!player.gameOver) {
+                allGameOver = false;
+                activePlayers++;
+            } else {
+                gameOverPlayers.push(player.name);
+            }
+        }
+    }
+    if (allGameOver && activePlayers === 0) {
+        for (const key in tetrisGames) {
+            tetrisGames[key].stopLoop();
+        }
+        const ranking = [];
+        for (let i = 1; i <= totalPlayers; i++) {
+            const player = data.players[`player${i}`];
+            if (player.name !== "---") {
+                ranking.push({
+                    name: player.name,
+                    score: player.score,
+                    lines: player.lines,
+                    gameOver: player.gameOver
+                });
+            }
+        }
+        ranking.sort((a, b) => b.score - a.score);
+        const winner = ranking[0];
+        const loser = ranking[ranking.length - 1];
+        let message = "";
+        if (ranking.length === 1) {
+            message = `${winner.name} GANHOU SOZINHO! 🏆`;
+        } else if (ranking.every(p => p.gameOver)) {
+            if (winner.score === loser.score) {
+                message = `EMPATE! ${winner.name} e ${loser.name} empataram! 🤝`;
+            } else {
+                message = `${winner.name} GANHOU! 🏆\n${loser.name} PERDEU! 💀`;
+            }
+        }
+        winnerMsgSpan.innerText = message;
+        let rankingHtml = "<h3>🏆 RANKING FINAL</h3>";
+        ranking.forEach((p, idx) => {
+            const medal = idx === 0 ? "🥇" : idx === 1 ? "🥈" : idx === 2 ? "🥉" : `${idx+1}º`;
+            rankingHtml += `<div style="padding:5px;color:#88ccff;">${medal} ${p.name} - SCORE: ${p.score} | LINES: ${p.lines}</div>`;
+        });
+        rankingDisplay.innerHTML = rankingHtml;
+        gameRef.update({
+            ranking: ranking,
+            winner: winner.name,
+            gameOver: true
+        });
+        overlay.classList.add("show");
+    }
+}
+
 async function restartGame() {
     if (!roomId) return;
     const snap = await gameRef.get();
     const data = snap.val();
     if (!data) return;
-    
     overlay.classList.remove("show");
-    
-    await gameRef.update({
-        players: {
-            player1: { 
-                name: data.players.player1.name, 
-                lines: 0, 
-                score: 0, 
-                gameOver: false 
-            },
-            player2: { 
-                name: data.players.player2.name, 
-                lines: 0, 
-                score: 0, 
-                gameOver: false 
-            }
-        },
-        started: true,
-        gameOver: false
-    });
-    
-    if (tetris1) {
-        tetris1.stopLoop();
-        tetris1.reset();
+    rankingDisplay.innerHTML = "";
+    const players = {};
+    for (let i = 1; i <= totalPlayers; i++) {
+        const playerData = data.players[`player${i}`];
+        players[`player${i}`] = {
+            name: playerData.name,
+            lines: 0,
+            score: 0,
+            gameOver: false,
+            disconnected: false
+        };
     }
-    if (tetris2) {
-        tetris2.stopLoop();
-        tetris2.reset();
+    await gameRef.update({
+        players: players,
+        started: true,
+        gameOver: false,
+        winner: null,
+        ranking: []
+    });
+    for (const key in tetrisGames) {
+        tetrisGames[key].stopLoop();
+        tetrisGames[key].reset();
     }
     gameStarted = true;
 }
@@ -486,12 +587,53 @@ function shareRoom() {
     if (!roomId) return;
     const link = window.location.origin + window.location.pathname + "?room=" + roomId;
     navigator.clipboard.writeText(link);
-    alert("LINK COPIADO! Compartilhe com seu amigo.");
+    alert("LINK COPIADO! Compartilhe com seus amigos!");
+}
+
+function exitGame() {
+    if (confirm("Tem certeza que quer sair?")) {
+        if (roomId && myPlayerId) {
+            gameRef.child(`players/${myPlayerId}`).update({ disconnected: true });
+        }
+        window.location.href = window.location.pathname;
+    }
+}
+
+function setupTouchControls() {
+    const buttons = document.querySelectorAll('.touch-btn');
+    buttons.forEach(btn => {
+        btn.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            const action = btn.dataset.action;
+            const game = tetrisGames[myPlayerId];
+            if (!game || game.gameOver) return;
+            switch(action) {
+                case 'left': game.move(-1, 0); break;
+                case 'right': game.move(1, 0); break;
+                case 'down': game.move(0, 1); break;
+                case 'rotate': game.rotate(); break;
+                case 'drop': game.hardDrop(); break;
+            }
+        });
+        btn.addEventListener('mousedown', (e) => {
+            const action = btn.dataset.action;
+            const game = tetrisGames[myPlayerId];
+            if (!game || game.gameOver) return;
+            switch(action) {
+                case 'left': game.move(-1, 0); break;
+                case 'right': game.move(1, 0); break;
+                case 'down': game.move(0, 1); break;
+                case 'rotate': game.rotate(); break;
+                case 'drop': game.hardDrop(); break;
+            }
+        });
+    });
 }
 
 createBtn.onclick = createRoom;
 shareBtn.onclick = shareRoom;
 resetBtn.onclick = restartGame;
+exitBtn.onclick = exitGame;
 closeOverlayBtn.onclick = () => {
     overlay.classList.remove("show");
 };
