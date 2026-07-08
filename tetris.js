@@ -9,6 +9,8 @@ const firebaseConfig = {
 };
 
 firebase.initializeApp(firebaseConfig);
+firebase.auth().signInAnonymously();
+
 const db = firebase.database();
 
 const lobbyDiv = document.getElementById("lobby");
@@ -43,23 +45,19 @@ let gameStarted = false;
 let myName = "";
 let keyHandler1 = null;
 let keyHandler2 = null;
-let firebaseReady = false;
+let gameLoopInterval = null;
 
-firebase.auth().signInAnonymously()
-    .then(() => {
-        firebaseReady = true;
-        const roomParam = new URLSearchParams(location.search).get("room");
-        if (roomParam) {
-            joinRoom(roomParam);
-        }
-    })
-    .catch((error) => {
-        firebaseReady = true;
-        const roomParam = new URLSearchParams(location.search).get("room");
-        if (roomParam) {
-            joinRoom(roomParam);
-        }
-    });
+window.onload = () => {
+    if (!sessionStorage.getItem("reloaded")) {
+        sessionStorage.setItem("reloaded", "true");
+        location.reload();
+        return;
+    }
+    const room = new URLSearchParams(window.location.search).get("room");
+    if (room) {
+        joinRoom(room);
+    }
+};
 
 class TetrisGame {
     constructor(canvasId, onUpdateStats, onGameOverCallback, playerId) {
@@ -314,10 +312,7 @@ class TetrisGame {
 }
 
 async function createRoom() {
-    if (!firebaseReady) {
-        alert("Aguardando conexão com Firebase...");
-        return;
-    }
+    sessionStorage.removeItem("reloaded");
     myName = playerNameInput.value.trim().toUpperCase();
     if (!myName) {
         alert("DIGITE SEU NOME!");
@@ -331,23 +326,19 @@ async function createRoom() {
             player1: { name: myName, lines: 0, score: 0, gameOver: false },
             player2: { name: "---", lines: 0, score: 0, gameOver: false }
         },
-        started: false
+        started: false,
+        gameOver: false
     });
     startGame();
 }
 
-async function joinRoom(roomIdFromUrl) {
-    if (!firebaseReady) {
-        setTimeout(() => joinRoom(roomIdFromUrl), 500);
-        return;
-    }
+async function joinRoom(id) {
     myName = prompt("DIGITE SEU NOME:").toUpperCase();
     if (!myName) {
-        window.location.href = window.location.pathname;
         return;
     }
-    const roomRef = db.ref("rooms/" + roomIdFromUrl);
-    const snap = await roomRef.get();
+    const ref = db.ref("rooms/" + id);
+    const snap = await ref.get();
     const data = snap.val();
     if (!data) {
         alert("SALA NÃO ENCONTRADA!");
@@ -359,13 +350,13 @@ async function joinRoom(roomIdFromUrl) {
         window.location.href = window.location.pathname;
         return;
     }
+    await ref.child("players/player2").update({ name: myName, lines: 0, score: 0, gameOver: false });
     myPlayerId = "player2";
-    roomId = roomIdFromUrl;
-    await roomRef.child("players/player2").update({ name: myName, lines: 0, score: 0, gameOver: false });
+    roomId = id;
     startGame();
 }
 
-async function startGame() {
+function startGame() {
     roomCodeSpan.innerText = `SALA: ${roomId}`;
     waitingMsg.style.display = "block";
     roomInfoDiv.style.display = "flex";
@@ -476,7 +467,8 @@ async function restartGame() {
                 gameOver: false 
             }
         },
-        started: true
+        started: true,
+        gameOver: false
     });
     
     if (tetris1) {
@@ -492,7 +484,7 @@ async function restartGame() {
 
 function shareRoom() {
     if (!roomId) return;
-    const link = `${window.location.origin}${window.location.pathname}?room=${roomId}`;
+    const link = window.location.origin + window.location.pathname + "?room=" + roomId;
     navigator.clipboard.writeText(link);
     alert("LINK COPIADO! Compartilhe com seu amigo.");
 }
