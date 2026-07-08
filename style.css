@@ -268,3 +268,29 @@ body {
         font-size: 2.5rem;
     }
 }
+.small {
+    padding: 6px 14px;
+    font-size: 0.9rem;
+}
+
+#lobby {
+    min-height: 350px;
+}
+
+.controls {
+    background: #111;
+    color: #ffaa88;
+    padding: 12px;
+    border-radius: 60px;
+    font-size: 0.9rem;
+    letter-spacing: 1px;
+    border: 1px solid #ffcc33;
+    text-align: center;
+}
+
+@media (max-width: 780px) {
+    .controls {
+        font-size: 0.7rem;
+        padding: 8px;
+    }
+}
