@@ -139,6 +139,7 @@ body {
     padding: 15px 20px;
     border-radius: 60px;
     border: 1px solid #ffcc33;
+    flex-wrap: wrap;
 }
 
 .player-panel {
@@ -147,6 +148,7 @@ body {
     background: #00000066;
     padding: 10px;
     border-radius: 40px;
+    min-width: 120px;
 }
 
 .player-name {
@@ -205,13 +207,14 @@ body {
 }
 
 .controls {
-    text-align: center;
     background: #111;
     color: #ffaa88;
     padding: 12px;
     border-radius: 60px;
-    font-size: 0.9rem;
+    font-size: 0.8rem;
     letter-spacing: 1px;
+    border: 1px solid #ffcc33;
+    text-align: center;
 }
 
 .reset {
@@ -245,11 +248,121 @@ body {
     padding: 30px 50px;
     text-align: center;
     color: #ffcc33;
+    max-width: 90vw;
+    max-height: 90vh;
+    overflow-y: auto;
 }
 
 .victory-card h2 {
     font-size: 2rem;
     margin-bottom: 20px;
+    white-space: pre-line;
+}
+
+.small {
+    padding: 6px 14px;
+    font-size: 0.9rem;
+}
+
+#lobby {
+    min-height: 350px;
+}
+
+.mode-selector {
+    display: flex;
+    gap: 15px;
+    align-items: center;
+    color: #88ccff;
+    font-size: 1rem;
+    width: 100%;
+    max-width: 300px;
+    justify-content: center;
+}
+
+.mode-selector select {
+    background: #111;
+    border: 2px solid #ffcc33;
+    padding: 8px 15px;
+    color: #ffcc33;
+    border-radius: 40px;
+    font-size: 1rem;
+    outline: none;
+    cursor: pointer;
+    flex: 1;
+}
+
+.mode-selector select option {
+    background: #111;
+    color: #ffcc33;
+}
+
+.players-list {
+    color: #88ccff;
+    margin-top: 10px;
+    padding: 10px;
+    background: rgba(0,0,0,0.3);
+    border-radius: 20px;
+    width: 100%;
+    max-width: 300px;
+}
+
+.touch-controls {
+    display: none;
+    justify-content: center;
+    gap: 15px;
+    margin-top: 15px;
+    flex-wrap: wrap;
+}
+
+.touch-row {
+    display: flex;
+    gap: 10px;
+    width: 100%;
+    justify-content: center;
+}
+
+.touch-btn {
+    background: rgba(255,204,51,0.2);
+    border: 2px solid #ffcc33;
+    color: #ffcc33;
+    font-size: 1.8rem;
+    padding: 15px 25px;
+    border-radius: 20px;
+    cursor: pointer;
+    touch-action: manipulation;
+    user-select: none;
+    min-width: 70px;
+    font-weight: bold;
+    transition: 0.1s;
+}
+
+.touch-btn:active {
+    transform: scale(0.9);
+    background: rgba(255,204,51,0.4);
+}
+
+#ranking-display {
+    text-align: left;
+    background: rgba(0,0,0,0.3);
+    padding: 15px;
+    border-radius: 20px;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+#ranking-display h3 {
+    color: #ffcc33;
+    text-align: center;
+    margin-bottom: 10px;
+}
+
+@media (pointer: coarse) {
+    .touch-controls {
+        display: flex !important;
+    }
+    .controls {
+        display: none;
+    }
 }
 
 @media (max-width: 780px) {
@@ -267,30 +380,26 @@ body {
     .arcade-title {
         font-size: 2.5rem;
     }
-}
-.small {
-    padding: 6px 14px;
-    font-size: 0.9rem;
-}
-
-#lobby {
-    min-height: 350px;
-}
-
-.controls {
-    background: #111;
-    color: #ffaa88;
-    padding: 12px;
-    border-radius: 60px;
-    font-size: 0.9rem;
-    letter-spacing: 1px;
-    border: 1px solid #ffcc33;
-    text-align: center;
-}
-
-@media (max-width: 780px) {
     .controls {
-        font-size: 0.7rem;
+        font-size: 0.6rem;
         padding: 8px;
+    }
+    .mode-selector {
+        flex-direction: column;
+        gap: 8px;
+    }
+    .mode-selector select {
+        width: 100%;
+    }
+    .touch-btn {
+        font-size: 1.4rem;
+        padding: 12px 18px;
+        min-width: 60px;
+    }
+    .touch-controls {
+        gap: 10px;
+    }
+    .board-wrapper canvas {
+        max-width: 200px;
     }
 }
