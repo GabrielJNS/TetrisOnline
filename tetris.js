@@ -9,7 +9,6 @@ const firebaseConfig = {
 };
 
 firebase.initializeApp(firebaseConfig);
-
 const db = firebase.database();
 
 const lobbyDiv = document.getElementById("lobby");
@@ -42,7 +41,8 @@ let tetris1 = null;
 let tetris2 = null;
 let gameStarted = false;
 let myName = "";
-let keyHandler = null;
+let keyHandler1 = null;
+let keyHandler2 = null;
 let firebaseReady = false;
 
 firebase.auth().signInAnonymously()
@@ -55,7 +55,6 @@ firebase.auth().signInAnonymously()
     })
     .catch((error) => {
         firebaseReady = true;
-        console.error("Erro na autenticação:", error);
         const roomParam = new URLSearchParams(location.search).get("room");
         if (roomParam) {
             joinRoom(roomParam);
@@ -63,11 +62,12 @@ firebase.auth().signInAnonymously()
     });
 
 class TetrisGame {
-    constructor(canvasId, onUpdateStats, onGameOverCallback) {
+    constructor(canvasId, onUpdateStats, onGameOverCallback, playerId) {
         this.canvas = document.getElementById(canvasId);
         this.ctx = this.canvas.getContext('2d');
         this.onUpdateStats = onUpdateStats;
         this.onGameOverCallback = onGameOverCallback;
+        this.playerId = playerId;
 
         this.cols = 10;
         this.rows = 20;
@@ -80,6 +80,7 @@ class TetrisGame {
         this.gameOver = false;
         this.intervalId = null;
         this.isActive = false;
+        this.dropInterval = 500;
 
         this.pieces = [
             [[1,1,1,1]],
@@ -93,27 +94,46 @@ class TetrisGame {
         this.colors = ['#00e5f0', '#f0e000', '#c084fc', '#f97316', '#3b82f6', '#10b981', '#ef4444'];
 
         this.spawnPiece();
-        this.startLoop();
+        this.draw();
     }
 
     initControls() {
-        if (keyHandler) {
-            window.removeEventListener('keydown', keyHandler);
+        if (this.playerId === "player1" && keyHandler1) {
+            window.removeEventListener('keydown', keyHandler1);
         }
-        
-        keyHandler = (e) => {
+        if (this.playerId === "player2" && keyHandler2) {
+            window.removeEventListener('keydown', keyHandler2);
+        }
+
+        const handler = (e) => {
             if (this.gameOver || !this.isActive) return;
-            const key = e.key;
-            if (key === 'ArrowLeft') this.move(-1, 0);
-            else if (key === 'ArrowRight') this.move(1, 0);
-            else if (key === 'ArrowDown') this.move(0, 1);
-            else if (key === 'ArrowUp') this.rotate();
-            else if (key === ' ') {
-                e.preventDefault();
-                this.hardDrop();
+            
+            if (this.playerId === "player1") {
+                switch(e.key) {
+                    case 'ArrowLeft': e.preventDefault(); this.move(-1, 0); break;
+                    case 'ArrowRight': e.preventDefault(); this.move(1, 0); break;
+                    case 'ArrowDown': e.preventDefault(); this.move(0, 1); break;
+                    case 'ArrowUp': e.preventDefault(); this.rotate(); break;
+                    case ' ': e.preventDefault(); this.hardDrop(); break;
+                }
+            }
+            else if (this.playerId === "player2") {
+                switch(e.key.toLowerCase()) {
+                    case 'a': e.preventDefault(); this.move(-1, 0); break;
+                    case 'd': e.preventDefault(); this.move(1, 0); break;
+                    case 's': e.preventDefault(); this.move(0, 1); break;
+                    case 'w': e.preventDefault(); this.rotate(); break;
+                    case 'q': e.preventDefault(); this.hardDrop(); break;
+                }
             }
         };
-        window.addEventListener('keydown', keyHandler);
+
+        if (this.playerId === "player1") {
+            keyHandler1 = handler;
+        } else {
+            keyHandler2 = handler;
+        }
+        window.addEventListener('keydown', handler);
     }
 
     spawnPiece() {
@@ -229,23 +249,29 @@ class TetrisGame {
     startLoop() {
         if (this.intervalId) clearInterval(this.intervalId);
         this.isActive = true;
-        this.intervalId = setInterval(() => {
-            if (!this.gameOver && this.isActive) {
-                this.move(0, 1);
-            }
-        }, 420);
         this.initControls();
+        
+        const loop = () => {
+            if (!this.isActive || this.gameOver) return;
+            this.move(0, 1);
+            this.intervalId = setTimeout(loop, this.dropInterval);
+        };
+        this.intervalId = setTimeout(loop, this.dropInterval);
     }
 
     stopLoop() {
         this.isActive = false;
         if (this.intervalId) {
-            clearInterval(this.intervalId);
+            clearTimeout(this.intervalId);
             this.intervalId = null;
         }
-        if (keyHandler) {
-            window.removeEventListener('keydown', keyHandler);
-            keyHandler = null;
+        if (this.playerId === "player1" && keyHandler1) {
+            window.removeEventListener('keydown', keyHandler1);
+            keyHandler1 = null;
+        }
+        if (this.playerId === "player2" && keyHandler2) {
+            window.removeEventListener('keydown', keyHandler2);
+            keyHandler2 = null;
         }
     }
 
@@ -283,6 +309,7 @@ class TetrisGame {
         this.onUpdateStats(0,0);
         this.spawnPiece();
         this.startLoop();
+        this.draw();
     }
 }
 
@@ -395,15 +422,26 @@ async function startGame() {
 function initTetris() {
     if (tetris1) {
         tetris1.stopLoop();
-        tetris1.reset();
+        tetris1 = null;
     }
     if (tetris2) {
         tetris2.stopLoop();
-        tetris2.reset();
+        tetris2 = null;
     }
     
-    tetris1 = new TetrisGame("board1", (lines, score) => updateStats("player1", lines, score), () => gameOver("player1"));
-    tetris2 = new TetrisGame("board2", (lines, score) => updateStats("player2", lines, score), () => gameOver("player2"));
+    tetris1 = new TetrisGame(
+        "board1", 
+        (lines, score) => updateStats("player1", lines, score), 
+        () => gameOver("player1"),
+        "player1"
+    );
+    
+    tetris2 = new TetrisGame(
+        "board2", 
+        (lines, score) => updateStats("player2", lines, score), 
+        () => gameOver("player2"),
+        "player2"
+    );
 }
 
 async function updateStats(player, lines, score) {
@@ -425,8 +463,18 @@ async function restartGame() {
     
     await gameRef.update({
         players: {
-            player1: { name: data.players.player1.name, lines: 0, score: 0, gameOver: false },
-            player2: { name: data.players.player2.name, lines: 0, score: 0, gameOver: false }
+            player1: { 
+                name: data.players.player1.name, 
+                lines: 0, 
+                score: 0, 
+                gameOver: false 
+            },
+            player2: { 
+                name: data.players.player2.name, 
+                lines: 0, 
+                score: 0, 
+                gameOver: false 
+            }
         },
         started: true
     });
@@ -446,7 +494,7 @@ function shareRoom() {
     if (!roomId) return;
     const link = `${window.location.origin}${window.location.pathname}?room=${roomId}`;
     navigator.clipboard.writeText(link);
-    alert("LINK COPIADO!");
+    alert("LINK COPIADO! Compartilhe com seu amigo.");
 }
 
 createBtn.onclick = createRoom;
@@ -455,6 +503,3 @@ resetBtn.onclick = restartGame;
 closeOverlayBtn.onclick = () => {
     overlay.classList.remove("show");
 };
-
-console.log("Firebase Ready:", firebaseReady);
-console.log("App iniciado!");
