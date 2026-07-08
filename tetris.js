@@ -44,11 +44,6 @@ let gameMode = "2players";
 let totalPlayers = 2;
 
 window.onload = () => {
-    if (!sessionStorage.getItem("reloaded")) {
-        sessionStorage.setItem("reloaded", "true");
-        location.reload();
-        return;
-    }
     const room = new URLSearchParams(window.location.search).get("room");
     if (room) {
         joinRoom(room);
@@ -304,7 +299,6 @@ class TetrisGame {
 }
 
 async function createRoom() {
-    sessionStorage.removeItem("reloaded");
     myName = playerNameInput.value.trim().toUpperCase();
     if (!myName) {
         alert("DIGITE SEU NOME!");
@@ -381,12 +375,19 @@ async function joinRoom(id) {
 
 function startGame() {
     roomCodeSpan.innerText = `SALA: ${roomId}`;
-    waitingMsg.style.display = "block";
     roomInfoDiv.style.display = "flex";
     lobbyDiv.style.display = "none";
     gameAreaDiv.style.display = "block";
     updateGameUI();
     setupTouchControls();
+
+    if (totalPlayers === 1) {
+        waitingMsg.style.display = "none";
+        playersListDiv.style.display = "none";
+    } else {
+        waitingMsg.style.display = "block";
+        playersListDiv.style.display = "block";
+    }
 
     gameRef = db.ref("rooms/" + roomId);
     gameRef.on("value", (snapshot) => {
@@ -395,15 +396,19 @@ function startGame() {
         updatePlayerUI(data);
         updatePlayersList(data);
         playersCountSpan.innerText = `${countPlayers(data)}/${data.totalPlayers}`;
-        if (countPlayers(data) === data.totalPlayers && !data.started) {
+
+        const filled = countPlayers(data);
+        if (filled === data.totalPlayers && !data.started) {
             gameRef.update({ started: true });
         }
+
         if (data.started && !gameStarted) {
             initAllTetris(data);
             gameStarted = true;
             waitingMsg.style.display = "none";
             playersListDiv.style.display = "none";
         }
+
         if (data.started && gameStarted) {
             checkGameOver(data);
         }
@@ -433,6 +438,10 @@ function updatePlayerUI(data) {
 }
 
 function updatePlayersList(data) {
+    if (totalPlayers === 1) {
+        playersListDiv.style.display = "none";
+        return;
+    }
     let html = "<div style='color:#88ccff;margin-top:10px;'>JOGADORES NA SALA:</div>";
     for (let i = 1; i <= data.totalPlayers; i++) {
         const player = data.players[`player${i}`];
@@ -494,15 +503,12 @@ async function gameOver(loser) {
 function checkGameOver(data) {
     let allGameOver = true;
     let activePlayers = 0;
-    let gameOverPlayers = [];
     for (let i = 1; i <= totalPlayers; i++) {
         const player = data.players[`player${i}`];
         if (player.name !== "---") {
             if (!player.gameOver) {
                 allGameOver = false;
                 activePlayers++;
-            } else {
-                gameOverPlayers.push(player.name);
             }
         }
     }
@@ -594,6 +600,7 @@ function exitGame() {
     if (confirm("Tem certeza que quer sair?")) {
         if (roomId && myPlayerId) {
             gameRef.child(`players/${myPlayerId}`).update({ disconnected: true });
+            gameRef.child(`players/${myPlayerId}`).update({ name: "---" });
         }
         window.location.href = window.location.pathname;
     }
@@ -602,7 +609,7 @@ function exitGame() {
 function setupTouchControls() {
     const buttons = document.querySelectorAll('.touch-btn');
     buttons.forEach(btn => {
-        btn.addEventListener('touchstart', (e) => {
+        const handler = (e) => {
             e.preventDefault();
             const action = btn.dataset.action;
             const game = tetrisGames[myPlayerId];
@@ -614,19 +621,8 @@ function setupTouchControls() {
                 case 'rotate': game.rotate(); break;
                 case 'drop': game.hardDrop(); break;
             }
-        });
-        btn.addEventListener('mousedown', (e) => {
-            const action = btn.dataset.action;
-            const game = tetrisGames[myPlayerId];
-            if (!game || game.gameOver) return;
-            switch(action) {
-                case 'left': game.move(-1, 0); break;
-                case 'right': game.move(1, 0); break;
-                case 'down': game.move(0, 1); break;
-                case 'rotate': game.rotate(); break;
-                case 'drop': game.hardDrop(); break;
-            }
-        });
+        };
+        btn.addEventListener('pointerdown', handler);
     });
 }
 
