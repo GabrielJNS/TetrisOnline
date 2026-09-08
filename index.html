@@ -40,9 +40,6 @@
                         <button id="share-room" class="arcade-btn small">COMPARTILHAR</button>
                         <span id="players-count" style="color:#88ffaa;">0/0</span>
                     </div>
-                    <div id="link-display" style="display:none; margin-top:10px; width:100%; max-width:400px;">
-                        <input type="text" id="share-link" readonly style="width:100%; padding:10px; border-radius:20px; background:#111; color:#88ccff; border:1px solid #ffcc33; text-align:center; font-size:0.9rem; outline:none;">
-                    </div>
                     <div id="waiting-msg" class="waiting" style="display:none">AGUARDANDO JOGADORES...</div>
                     <div id="players-list" class="players-list" style="display:none"></div>
                 </div>
@@ -83,6 +80,12 @@
                             <div class="status-led" id="p4-status">🟢</div>
                         </div>
                     </div>
+
+                    <div id="game-link-display" style="display:none; margin:10px 0;">
+                        <input type="text" id="game-share-link" readonly style="width:100%; padding:10px; border-radius:20px; background:#111; color:#88ccff; border:1px solid #ffcc33; text-align:center; font-size:0.9rem; outline:none;">
+                        <button id="share-room-2" class="arcade-btn small">COPIAR LINK</button>
+                    </div>
+
                     <div class="boards-container" id="boards-container">
                         <div class="board-wrapper">
                             <canvas id="board1" width="300" height="600"></canvas>
