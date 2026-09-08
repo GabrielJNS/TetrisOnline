@@ -27,7 +27,14 @@
                             <option value="4players">4 JOGADORES</option>
                         </select>
                     </div>
-                    <button id="create-room" class="arcade-btn">CRIAR SALA</button>
+                    <div class="mode-selector">
+                        <label>TIPO:</label>
+                        <select id="game-type">
+                            <option value="online" selected>ONLINE</option>
+                            <option value="local">LOCAL</option>
+                        </select>
+                    </div>
+                    <button id="start-game" class="arcade-btn">CRIAR SALA</button>
                     <div id="room-info" class="room-info" style="display:none">
                         <span id="room-code"></span>
                         <button id="share-room" class="arcade-btn small">COMPARTILHAR</button>
