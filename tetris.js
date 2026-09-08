@@ -678,7 +678,7 @@ function checkGameOver(data) {
         const loser = ranking[ranking.length - 1];
         let message = "";
         if (ranking.length === 1) {
-            message = `${winner.name} GANHOU SOZINHO! 🏆`;
+            message = `${winner.name} Perdeu`;
         } else if (ranking.every(p => p.gameOver)) {
             if (winner.score === loser.score) {
                 message = `EMPATE! ${winner.name} e ${loser.name} empataram! 🤝`;
