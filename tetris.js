@@ -9,7 +9,43 @@ const firebaseConfig = {
 };
 
 firebase.initializeApp(firebaseConfig);
-firebase.auth().signInAnonymously();
+
+let authReady = false;
+firebase.auth().onAuthStateChanged((user) => {
+    if (user) {
+        authReady = true;
+        const room = new URLSearchParams(window.location.search).get("room");
+        if (room && !window.roomJoined) {
+            window.roomJoined = true;
+            joinRoom(room);
+        }
+    } else {
+        firebase.auth().signInAnonymously().catch((error) => {
+            console.error("Falha na autenticação anônima:", error);
+            if (!sessionStorage.getItem("reload_tried")) {
+                sessionStorage.setItem("reload_tried", "true");
+                location.reload();
+            } else {
+                alert("Erro de conexão. Recarregue a página manualmente.");
+            }
+        });
+    }
+});
+
+function waitForAuth() {
+    return new Promise((resolve) => {
+        if (authReady) {
+            resolve();
+        } else {
+            const check = setInterval(() => {
+                if (authReady) {
+                    clearInterval(check);
+                    resolve();
+                }
+            }, 100);
+        }
+    });
+}
 
 const db = firebase.database();
 
@@ -17,6 +53,7 @@ const lobbyDiv = document.getElementById("lobby");
 const gameAreaDiv = document.getElementById("game-area");
 const startBtn = document.getElementById("start-game");
 const shareBtn = document.getElementById("share-room");
+const shareBtn2 = document.getElementById("share-room-2");
 const resetBtn = document.getElementById("reset-game");
 const exitBtn = document.getElementById("exit-game");
 const playerNameInput = document.getElementById("player-name");
@@ -33,8 +70,8 @@ const overlay = document.getElementById("victory-overlay");
 const winnerMsgSpan = document.getElementById("winner-message");
 const rankingDisplay = document.getElementById("ranking-display");
 const closeOverlayBtn = document.getElementById("close-overlay");
-const shareLinkInput = document.getElementById("share-link");
-const linkDisplayDiv = document.getElementById("link-display");
+const shareLinkInput = document.getElementById("game-share-link");
+const linkDisplayDiv = document.getElementById("game-link-display");
 
 let roomId = null;
 let myPlayerId = null;
@@ -50,14 +87,6 @@ let localGameState = {
     players: {},
     gameOver: false,
     ranking: []
-};
-
-window.onload = () => {
-    const room = new URLSearchParams(window.location.search).get("room");
-    if (room) {
-        joinRoom(room);
-    }
-    updateStartButtonText();
 };
 
 function updateStartButtonText() {
@@ -320,6 +349,7 @@ class TetrisGame {
 }
 
 async function createRoom() {
+    await waitForAuth();
     myName = playerNameInput.value.trim().toUpperCase();
     if (!myName) {
         alert("DIGITE SEU NOME!");
@@ -356,6 +386,7 @@ async function createRoom() {
 }
 
 async function joinRoom(id) {
+    await waitForAuth();
     myName = prompt("DIGITE SEU NOME:").toUpperCase();
     if (!myName) {
         window.location.href = window.location.pathname;
@@ -402,7 +433,6 @@ function startLocalGame() {
     isLocalMode = true;
     myPlayerId = "player1";
 
-   
     localGameState.players = {};
     for (let i = 1; i <= totalPlayers; i++) {
         localGameState.players[`player${i}`] = {
@@ -416,9 +446,9 @@ function startLocalGame() {
     localGameState.gameOver = false;
     localGameState.ranking = [];
 
-
     roomCodeSpan.innerText = "";
     roomInfoDiv.style.display = "none";
+    linkDisplayDiv.style.display = "none";
     lobbyDiv.style.display = "none";
     gameAreaDiv.style.display = "block";
     updateGameUI();
@@ -428,15 +458,12 @@ function startLocalGame() {
     playersListDiv.style.display = "none";
     playersCountSpan.innerText = `${totalPlayers}/${totalPlayers}`;
 
-
     initAllTetris(null);
     gameStarted = true;
 }
 
 function startGame() {
-    if (isLocalMode) {
-        return;
-    }
+    if (isLocalMode) return;
     roomCodeSpan.innerText = `SALA: ${roomId}`;
     roomInfoDiv.style.display = "flex";
     lobbyDiv.style.display = "none";
@@ -494,7 +521,7 @@ function showShareLink() {
     if (!roomId) return;
     const link = window.location.origin + window.location.pathname + "?room=" + roomId;
     shareLinkInput.value = link;
-    linkDisplayDiv.style.display = "block";
+    linkDisplayDiv.style.display = "flex";
 }
 
 function countPlayers(data) {
@@ -839,6 +866,7 @@ startBtn.onclick = () => {
     }
 };
 shareBtn.onclick = shareRoom;
+shareBtn2.onclick = shareRoom;
 resetBtn.onclick = restartGame;
 exitBtn.onclick = exitGame;
 closeOverlayBtn.onclick = () => {
