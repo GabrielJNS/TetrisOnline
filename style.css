@@ -171,6 +171,24 @@ body {
     font-size: 1rem;
     margin-top: 6px;
 }
+#game-link-display {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin: 10px 0;
+}
+
+#game-link-display input {
+    flex: 1;
+    min-width: 200px;
+    max-width: 400px;
+}
+
+.mode-selector {
+    margin-top: 10px;
+}
 
 .vs-divider {
     font-size: 2rem;
