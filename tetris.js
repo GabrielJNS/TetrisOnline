@@ -400,9 +400,9 @@ function startLocalGame() {
     const modeMap = { solo: 1, '2players': 2, '3players': 3, '4players': 4 };
     totalPlayers = modeMap[gameMode] || 2;
     isLocalMode = true;
-    myPlayerId = "player1"; // não importa muito, todos os jogadores estão locais
+    myPlayerId = "player1";
 
-    // Inicializa o estado local
+   
     localGameState.players = {};
     for (let i = 1; i <= totalPlayers; i++) {
         localGameState.players[`player${i}`] = {
@@ -416,7 +416,7 @@ function startLocalGame() {
     localGameState.gameOver = false;
     localGameState.ranking = [];
 
-    // Exibe a área de jogo
+
     roomCodeSpan.innerText = "";
     roomInfoDiv.style.display = "none";
     lobbyDiv.style.display = "none";
@@ -428,14 +428,13 @@ function startLocalGame() {
     playersListDiv.style.display = "none";
     playersCountSpan.innerText = `${totalPlayers}/${totalPlayers}`;
 
-    // Inicia os jogos
+
     initAllTetris(null);
     gameStarted = true;
 }
 
 function startGame() {
     if (isLocalMode) {
-        // No modo local, startGame não é usado; startLocalGame já fez tudo
         return;
     }
     roomCodeSpan.innerText = `SALA: ${roomId}`;
@@ -557,7 +556,6 @@ function updateGameUI() {
 }
 
 function initAllTetris(data) {
-    // Limpa jogos antigos
     for (const key in tetrisGames) {
         tetrisGames[key].stopLoop();
         delete tetrisGames[key];
@@ -568,7 +566,6 @@ function initAllTetris(data) {
         let onUpdateStats, onGameOverCallback;
 
         if (isLocalMode) {
-            // Callbacks para modo local
             onUpdateStats = (lines, score) => {
                 if (localGameState.players[playerId]) {
                     localGameState.players[playerId].lines = lines;
@@ -584,7 +581,6 @@ function initAllTetris(data) {
                 }
             };
         } else {
-            // Callbacks para modo online (Firebase)
             onUpdateStats = (lines, score) => updateStats(playerId, lines, score);
             onGameOverCallback = () => gameOver(playerId);
         }
@@ -731,7 +727,6 @@ async function restartGame() {
     rankingDisplay.innerHTML = "";
 
     if (isLocalMode) {
-        // Reinicia localmente
         for (let i = 1; i <= totalPlayers; i++) {
             const playerId = `player${i}`;
             localGameState.players[playerId].lines = 0;
@@ -746,7 +741,6 @@ async function restartGame() {
         return;
     }
 
-    // Modo online
     if (!roomId) return;
     const snap = await gameRef.get();
     const data = snap.val();
@@ -822,8 +816,6 @@ function setupTouchControls() {
         const handler = (e) => {
             e.preventDefault();
             const action = btn.dataset.action;
-            // No modo local, os controles de toque devem controlar o jogador 1 (ou todos?)
-            // Para simplificar, no modo local o toque controla o player1
             const game = tetrisGames[isLocalMode ? 'player1' : myPlayerId];
             if (!game || game.gameOver) return;
             switch(action) {
