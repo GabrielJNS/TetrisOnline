@@ -15,7 +15,7 @@ const db = firebase.database();
 
 const lobbyDiv = document.getElementById("lobby");
 const gameAreaDiv = document.getElementById("game-area");
-const createBtn = document.getElementById("create-room");
+const startBtn = document.getElementById("start-game");
 const shareBtn = document.getElementById("share-room");
 const resetBtn = document.getElementById("reset-game");
 const exitBtn = document.getElementById("exit-game");
@@ -26,6 +26,7 @@ const roomInfoDiv = document.getElementById("room-info");
 const playersListDiv = document.getElementById("players-list");
 const playersCountSpan = document.getElementById("players-count");
 const gameModeSelect = document.getElementById("game-mode");
+const gameTypeSelect = document.getElementById("game-type");
 const controlsText = document.getElementById("controls-text");
 const vsDivider = document.getElementById("vs-divider");
 const overlay = document.getElementById("victory-overlay");
@@ -44,13 +45,31 @@ let myName = "";
 let keyHandlers = {};
 let gameMode = "2players";
 let totalPlayers = 2;
+let isLocalMode = false;
+let localGameState = {
+    players: {},
+    gameOver: false,
+    ranking: []
+};
 
 window.onload = () => {
     const room = new URLSearchParams(window.location.search).get("room");
     if (room) {
         joinRoom(room);
     }
+    updateStartButtonText();
 };
+
+function updateStartButtonText() {
+    const type = gameTypeSelect.value;
+    if (type === "local") {
+        startBtn.innerText = "INICIAR JOGO LOCAL";
+    } else {
+        startBtn.innerText = "CRIAR SALA";
+    }
+}
+
+gameTypeSelect.addEventListener("change", updateStartButtonText);
 
 class TetrisGame {
     constructor(canvasId, onUpdateStats, onGameOverCallback, playerId, playerIndex) {
@@ -376,7 +395,49 @@ async function joinRoom(id) {
     startGame();
 }
 
+function startLocalGame() {
+    gameMode = gameModeSelect.value;
+    const modeMap = { solo: 1, '2players': 2, '3players': 3, '4players': 4 };
+    totalPlayers = modeMap[gameMode] || 2;
+    isLocalMode = true;
+    myPlayerId = "player1"; // não importa muito, todos os jogadores estão locais
+
+    // Inicializa o estado local
+    localGameState.players = {};
+    for (let i = 1; i <= totalPlayers; i++) {
+        localGameState.players[`player${i}`] = {
+            name: `JOGADOR ${i}`,
+            lines: 0,
+            score: 0,
+            gameOver: false,
+            disconnected: false
+        };
+    }
+    localGameState.gameOver = false;
+    localGameState.ranking = [];
+
+    // Exibe a área de jogo
+    roomCodeSpan.innerText = "";
+    roomInfoDiv.style.display = "none";
+    lobbyDiv.style.display = "none";
+    gameAreaDiv.style.display = "block";
+    updateGameUI();
+    setupTouchControls();
+
+    waitingMsg.style.display = "none";
+    playersListDiv.style.display = "none";
+    playersCountSpan.innerText = `${totalPlayers}/${totalPlayers}`;
+
+    // Inicia os jogos
+    initAllTetris(null);
+    gameStarted = true;
+}
+
 function startGame() {
+    if (isLocalMode) {
+        // No modo local, startGame não é usado; startLocalGame já fez tudo
+        return;
+    }
     roomCodeSpan.innerText = `SALA: ${roomId}`;
     roomInfoDiv.style.display = "flex";
     lobbyDiv.style.display = "none";
@@ -496,6 +557,7 @@ function updateGameUI() {
 }
 
 function initAllTetris(data) {
+    // Limpa jogos antigos
     for (const key in tetrisGames) {
         tetrisGames[key].stopLoop();
         delete tetrisGames[key];
@@ -503,14 +565,52 @@ function initAllTetris(data) {
     for (let i = 1; i <= totalPlayers; i++) {
         const playerId = `player${i}`;
         const canvasId = `board${i}`;
+        let onUpdateStats, onGameOverCallback;
+
+        if (isLocalMode) {
+            // Callbacks para modo local
+            onUpdateStats = (lines, score) => {
+                if (localGameState.players[playerId]) {
+                    localGameState.players[playerId].lines = lines;
+                    localGameState.players[playerId].score = score;
+                    updateLocalPlayerUI(playerId);
+                }
+            };
+            onGameOverCallback = () => {
+                if (localGameState.players[playerId]) {
+                    localGameState.players[playerId].gameOver = true;
+                    updateLocalPlayerUI(playerId);
+                    checkGameOverLocal();
+                }
+            };
+        } else {
+            // Callbacks para modo online (Firebase)
+            onUpdateStats = (lines, score) => updateStats(playerId, lines, score);
+            onGameOverCallback = () => gameOver(playerId);
+        }
+
         tetrisGames[playerId] = new TetrisGame(
             canvasId,
-            (lines, score) => updateStats(playerId, lines, score),
-            () => gameOver(playerId),
+            onUpdateStats,
+            onGameOverCallback,
             playerId,
             i
         );
     }
+}
+
+function updateLocalPlayerUI(playerId) {
+    const player = localGameState.players[playerId];
+    if (!player) return;
+    const index = playerId.replace('player', '');
+    const nameSpan = document.getElementById(`p${index}-name`);
+    const linesSpan = document.getElementById(`p${index}-lines`);
+    const scoreSpan = document.getElementById(`p${index}-score`);
+    const statusSpan = document.getElementById(`p${index}-status`);
+    if (nameSpan) nameSpan.innerText = player.name;
+    if (linesSpan) linesSpan.innerText = player.lines;
+    if (scoreSpan) scoreSpan.innerText = player.score;
+    if (statusSpan) statusSpan.innerText = player.gameOver ? "🔴" : "🟢";
 }
 
 async function updateStats(player, lines, score) {
@@ -579,13 +679,78 @@ function checkGameOver(data) {
     }
 }
 
+function checkGameOverLocal() {
+    let allGameOver = true;
+    for (let i = 1; i <= totalPlayers; i++) {
+        const player = localGameState.players[`player${i}`];
+        if (player && !player.gameOver) {
+            allGameOver = false;
+            break;
+        }
+    }
+    if (allGameOver) {
+        for (const key in tetrisGames) {
+            tetrisGames[key].stopLoop();
+        }
+        const ranking = [];
+        for (let i = 1; i <= totalPlayers; i++) {
+            const player = localGameState.players[`player${i}`];
+            ranking.push({
+                name: player.name,
+                score: player.score,
+                lines: player.lines,
+                gameOver: player.gameOver
+            });
+        }
+        ranking.sort((a, b) => b.score - a.score);
+        const winner = ranking[0];
+        const loser = ranking[ranking.length - 1];
+        let message = "";
+        if (ranking.length === 1) {
+            message = `${winner.name} GANHOU SOZINHO! 🏆`;
+        } else {
+            if (winner.score === loser.score) {
+                message = `EMPATE! ${winner.name} e ${loser.name} empataram! 🤝`;
+            } else {
+                message = `${winner.name} GANHOU! 🏆\n${loser.name} PERDEU! 💀`;
+            }
+        }
+        winnerMsgSpan.innerText = message;
+        let rankingHtml = "<h3>🏆 RANKING FINAL</h3>";
+        ranking.forEach((p, idx) => {
+            const medal = idx === 0 ? "🥇" : idx === 1 ? "🥈" : idx === 2 ? "🥉" : `${idx+1}º`;
+            rankingHtml += `<div style="padding:5px;color:#88ccff;">${medal} ${p.name} - SCORE: ${p.score} | LINES: ${p.lines}</div>`;
+        });
+        rankingDisplay.innerHTML = rankingHtml;
+        overlay.classList.add("show");
+    }
+}
+
 async function restartGame() {
+    overlay.classList.remove("show");
+    rankingDisplay.innerHTML = "";
+
+    if (isLocalMode) {
+        // Reinicia localmente
+        for (let i = 1; i <= totalPlayers; i++) {
+            const playerId = `player${i}`;
+            localGameState.players[playerId].lines = 0;
+            localGameState.players[playerId].score = 0;
+            localGameState.players[playerId].gameOver = false;
+            updateLocalPlayerUI(playerId);
+        }
+        for (const key in tetrisGames) {
+            tetrisGames[key].reset();
+        }
+        gameStarted = true;
+        return;
+    }
+
+    // Modo online
     if (!roomId) return;
     const snap = await gameRef.get();
     const data = snap.val();
     if (!data) return;
-    overlay.classList.remove("show");
-    rankingDisplay.innerHTML = "";
     const players = {};
     for (let i = 1; i <= totalPlayers; i++) {
         const playerData = data.players[`player${i}`];
@@ -612,7 +777,10 @@ async function restartGame() {
 }
 
 function shareRoom() {
-    if (!roomId) return;
+    if (!roomId) {
+        alert("Nenhuma sala criada ainda.");
+        return;
+    }
     const link = window.location.origin + window.location.pathname + "?room=" + roomId;
     if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(link).then(() => {
@@ -641,7 +809,7 @@ function fallbackCopy(text) {
 
 function exitGame() {
     if (confirm("Tem certeza que quer sair?")) {
-        if (roomId && myPlayerId) {
+        if (!isLocalMode && roomId && myPlayerId) {
             gameRef.child(`players/${myPlayerId}`).update({ disconnected: true, name: "---" });
         }
         window.location.href = window.location.pathname;
@@ -654,7 +822,9 @@ function setupTouchControls() {
         const handler = (e) => {
             e.preventDefault();
             const action = btn.dataset.action;
-            const game = tetrisGames[myPlayerId];
+            // No modo local, os controles de toque devem controlar o jogador 1 (ou todos?)
+            // Para simplificar, no modo local o toque controla o player1
+            const game = tetrisGames[isLocalMode ? 'player1' : myPlayerId];
             if (!game || game.gameOver) return;
             switch(action) {
                 case 'left': game.move(-1, 0); break;
@@ -668,7 +838,14 @@ function setupTouchControls() {
     });
 }
 
-createBtn.onclick = createRoom;
+startBtn.onclick = () => {
+    const type = gameTypeSelect.value;
+    if (type === "local") {
+        startLocalGame();
+    } else {
+        createRoom();
+    }
+};
 shareBtn.onclick = shareRoom;
 resetBtn.onclick = restartGame;
 exitBtn.onclick = exitGame;
